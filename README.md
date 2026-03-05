@@ -1,9 +1,9 @@
 
 # Ultimate Tic-Tac-Toe with AI
 
-![CI](https://img.shields.io/github/actions/workflow/status/MatALass/ultimate-ttt/ci.yml)
-![License](https://img.shields.io/github/license/MatALass/ultimate-ttt)
-![Repo Size](https://img.shields.io/github/repo-size/MatALass/ultimate-ttt)
+![CI](https://img.shields.io/github/actions/workflow/status/MatALass/morpion-ultime/ci.yml)
+![License](https://img.shields.io/github/license/MatALass/morpion-ultime)
+![Repo Size](https://img.shields.io/github/repo-size/MatALass/morpion-ultime)
 ![Language](https://img.shields.io/badge/language-JavaScript-yellow)
 ![AI](https://img.shields.io/badge/AI-Minimax%20%2B%20MCTS-blue)
 
@@ -16,7 +16,7 @@ analysis tools, replay functionality and simulation capabilities.
 
 Once deployed with GitHub Pages:
 
-https://MatALass.github.io/ultimate-ttt/
+https://MatALass.github.io/morpion-ultime/
 
 ---
 
@@ -84,7 +84,7 @@ Win **three small boards in a row**.
 # Project structure
 
 ```
-ultimate-ttt
+morpion-ultime
 
 index.html
 css/
