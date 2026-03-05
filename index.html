@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ultimate Tic-Tac-Toe</title>
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+
+  <body>
+    <header class="top">
+      <h1>Ultimate Tic-Tac-Toe</h1>
+
+      <section class="controls">
+        <div class="status" id="status">Chargement…</div>
+
+        <div class="row">
+          <label>
+            Mode :
+            <select id="mode">
+              <option value="hva" selected>Humain vs IA</option>
+              <option value="hvh">Humain vs Humain</option>
+              <option value="ava">IA vs IA</option>
+            </select>
+          </label>
+
+          <label>
+            Tu joues :
+            <select id="humanSymbol">
+              <option value="X" selected>X</option>
+              <option value="O">O</option>
+            </select>
+          </label>
+
+          <label>
+            IA :
+            <select id="aiType">
+              <option value="minimax" selected>Minimax</option>
+              <option value="mcts">MCTS (UCT)</option>
+            </select>
+          </label>
+
+          <label>
+            Difficulté :
+            <select id="difficulty">
+              <option value="easy">Facile</option>
+              <option value="medium" selected>Moyen</option>
+              <option value="hard">Difficile</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <label class="range">
+            Temps IA (ms) :
+            <input id="aiTimeLimit" type="range" min="50" max="1500" step="50" value="250" />
+            <span id="aiTimeLimitLabel">250</span>
+          </label>
+
+          <label>
+            Vitesse :
+            <select id="speed">
+              <option value="1" selected>x1</option>
+              <option value="2">x2</option>
+              <option value="5">x5</option>
+              <option value="10">x10</option>
+            </select>
+          </label>
+
+          <button id="playPause" title="Pause/Play (Espace)">Pause</button>
+          <button id="undo" title="Undo (U)">Undo</button>
+          <button id="redo" title="Redo (R)">Redo</button>
+          <button id="restart" title="Nouvelle partie (N)">Recommencer</button>
+          <button id="resetAll" title="Reset total">Reset total</button>
+        </div>
+
+        <div class="row small">
+          <div class="chip" id="activeHint">Plateau actif : —</div>
+          <div class="chip" id="playerHint">Joueur : —</div>
+          <div class="chip" id="aiHint">IA : —</div>
+          <div class="chip" id="seriesHint">Série: X 0 • O 0 • = 0</div>
+        </div>
+
+        <div class="row small">
+          <label class="toggle">
+            <input type="checkbox" id="analysis" />
+            Analyse (top coups + heatmap)
+          </label>
+
+          <button id="replayStart" title="Replay début">⏮</button>
+          <button id="replayPrev" title="Coup précédent">⏪</button>
+          <button id="replayNext" title="Coup suivant">⏩</button>
+          <button id="replayEnd" title="Replay fin">⏭</button>
+          <button id="replayPlay" title="Lecture replay">▶</button>
+
+          <button id="simulate100" title="Simuler 100 parties IA vs IA">Simuler 100</button>
+          <button id="simulate1000" title="Simuler 1000 parties IA vs IA">Simuler 1000</button>
+        </div>
+
+        <details class="share">
+          <summary>Partager / Importer une partie</summary>
+          <div class="share-grid">
+            <textarea id="shareCode" rows="4" placeholder="Code de partie…"></textarea>
+            <div class="share-actions">
+              <button id="exportBtn">Exporter</button>
+              <button id="importBtn">Importer</button>
+              <button id="clearSaveBtn">Effacer sauvegarde</button>
+            </div>
+          </div>
+          <p class="hint">
+            Raccourcis : <b>U</b> Undo • <b>R</b> Redo • <b>N</b> Nouvelle partie • <b>Espace</b> Pause/Play.
+          </p>
+        </details>
+      </section>
+    </header>
+
+    <main class="layout">
+      <div class="left">
+        <div id="board" class="big-board" aria-label="Plateau"></div>
+
+        <section class="panel" style="margin-top:14px;">
+          <h2>Analyse (Top 3)</h2>
+          <ol id="topMoves" class="log"></ol>
+        </section>
+      </div>
+
+      <aside class="right">
+        <section class="panel">
+          <h2>Stats IA</h2>
+          <div class="kv">
+            <div class="k">Dernier coup</div><div class="v" id="aiMove">—</div>
+            <div class="k">Temps</div><div class="v" id="aiTime">—</div>
+            <div class="k">Profondeur</div><div class="v" id="aiDepth">—</div>
+            <div class="k">Nœuds</div><div class="v" id="aiNodes">—</div>
+            <div class="k">Cache</div><div class="v" id="aiCache">—</div>
+          </div>
+          <div class="note">(Stats mises à jour quand l’IA joue.)</div>
+        </section>
+
+        <section class="panel">
+          <h2>Historique</h2>
+          <ol id="log" class="log"></ol>
+        </section>
+      </aside>
+
+      <div id="overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <div id="overlayText" class="overlay-text"></div>
+          <button id="overlayRestart">Rejouer</button>
+        </div>
+      </div>
+
+      <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    </main>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>
