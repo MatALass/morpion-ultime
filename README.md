@@ -24,7 +24,7 @@ https://MatALass.github.io/morpion-ultime/
 
 Add a gameplay GIF here:
 
-![Gameplay](docs/gameplay.gif)
+![Ultimate Tic Tac Toe](assets/screenshot-game.png)
 
 ---
 
