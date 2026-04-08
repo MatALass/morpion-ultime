@@ -19,11 +19,9 @@ export function clearLocal() {
 }
 
 export function encodeShare(payload) {
-  const json = JSON.stringify(payload);
-  return btoa(unescape(encodeURIComponent(json)));
+  return btoa(encodeURIComponent(JSON.stringify(payload)));
 }
 
 export function decodeShare(code) {
-  const json = decodeURIComponent(escape(atob(code.trim())));
-  return JSON.parse(json);
+  return JSON.parse(decodeURIComponent(atob(code.trim())));
 }

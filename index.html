@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Ultimate Tic-Tac-Toe avec IA (Minimax + MCTS), duel en ligne, replay et analyse de coups." />
+    <meta property="og:title" content="Ultimate Tic-Tac-Toe" />
+    <meta property="og:description" content="Morpion Ultime avec IA, duel en ligne et outils d'analyse." />
+    <meta property="og:type" content="website" />
     <title>Ultimate Tic-Tac-Toe</title>
     <link rel="stylesheet" href="./css/style.css" />
   </head>
@@ -21,6 +25,7 @@
               <option value="hva" selected>Humain vs IA</option>
               <option value="hvh">Humain vs Humain</option>
               <option value="ava">IA vs IA</option>
+              <option value="online">🌐 Duel en ligne</option>
             </select>
           </label>
 
@@ -111,6 +116,34 @@
             Raccourcis : <b>U</b> Undo • <b>R</b> Redo • <b>N</b> Nouvelle partie • <b>Espace</b> Pause/Play.
           </p>
         </details>
+
+        <div id="onlinePanel" class="online-panel hidden">
+          <div class="online-panel__header">
+            <span class="online-panel__title">🌐 Duel en ligne</span>
+            <button id="leaveRoomBtn" class="hidden btn-danger">Quitter la room</button>
+          </div>
+
+          <div class="online-panel__body">
+            <div class="online-create-join">
+              <button id="createRoomBtn" class="btn-primary">Créer une room</button>
+              <span class="online-sep">ou</span>
+              <input id="roomCodeInput" type="text" placeholder="Code room (ex: A3F7B2)" maxlength="6" spellcheck="false" autocomplete="off" />
+              <button id="joinRoomBtn" class="btn-primary">Rejoindre</button>
+            </div>
+
+            <div id="onlineRoomIdRow" class="online-room-id hidden">
+              <span>Code à partager :</span>
+              <strong id="roomIdDisplay" class="room-code">—</strong>
+              <button id="copyRoomBtn" title="Copier le code">📋</button>
+            </div>
+
+            <div id="roomStatus" class="room-status"></div>
+          </div>
+
+          <p class="hint">
+            Crée une room et envoie le code à ton adversaire. Undo/Redo sont désactivés en mode en ligne.
+          </p>
+        </div>
       </section>
     </header>
 

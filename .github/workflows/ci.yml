@@ -30,3 +30,9 @@ jobs:
 
       - name: Unit tests (Vitest)
         run: npm test
+
+      - name: Check api/ functions exist
+        run: |
+          test -f api/room.js || (echo "api/room.js missing" && exit 1)
+          test -f api/move.js || (echo "api/move.js missing" && exit 1)
+          echo "API functions OK"

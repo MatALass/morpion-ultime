@@ -4,6 +4,7 @@ import { chooseAiMoveWithStats, getTopMoves } from "./ai.js";
 import { buildBoardDOM, render } from "./ui.js";
 import { saveToLocal, loadFromLocal, clearLocal, encodeShare, decodeShare } from "./storage.js";
 import { buildReplay } from "./replay.js";
+import { OnlineSession, createRoom, joinRoom } from "./online.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -58,34 +59,51 @@ const elExport = $("exportBtn");
 const elImport = $("importBtn");
 const elClearSave = $("clearSaveBtn");
 
+// Online duel elements
+const elOnlinePanel    = $("onlinePanel");
+const elCreateRoom     = $("createRoomBtn");
+const elJoinRoom       = $("joinRoomBtn");
+const elRoomCodeInput  = $("roomCodeInput");
+const elRoomStatus     = $("roomStatus");
+const elRoomId         = $("roomIdDisplay");
+const elRoomIdRow      = $("onlineRoomIdRow");
+const elCopyRoom       = $("copyRoomBtn");
+const elLeaveRoom      = $("leaveRoomBtn");
+
 // App state
 let state = createInitialState();
 let prevState = null;
 
-// Past/future with full snapshot (for perfect undo/redo)
 let past = [];
 let future = [];
 
-// Moves list for export/replay
-let moveList = []; // [{sb,c,player:"X"|"O"}]
-let log = [];      // html strings
+let moveList = [];
+let log = [];
 
-// Replay mode
 let replayStates = null;
 let replayIndex = 0;
 let replayTimer = null;
 
-// Autoplay (IA vs IA) pause
 let paused = false;
 let busy = false;
 let toastTimer = null;
 
-// Series scoreboard (for simulations)
 let series = { X: 0, O: 0, D: 0 };
+
+// Online session
+/** @type {OnlineSession|null} */
+let onlineSession = null;
+let onlineSymbol = null; // "X" | "O" — our symbol in the current online game
+
+function isOnlineMode() {
+  return elMode.value === "online";
+}
 
 function vToChar(v) { return v === X ? "X" : (v === O ? "O" : ""); }
 function symToVal(sym) { return sym === "X" ? X : O; }
 function otherSym(sym) { return sym === "X" ? "O" : "X"; }
+
+// ─── Toast / Overlay ───────────────────────────────────────────────────────
 
 function showToast(msg) {
   if (toastTimer) clearTimeout(toastTimer);
@@ -132,6 +150,8 @@ function updateTopMovesUI(list) {
     elTopMoves.appendChild(li);
   }
 }
+
+// ─── Snapshot / Restore ────────────────────────────────────────────────────
 
 function snapshot() {
   return {
@@ -190,10 +210,9 @@ function applySettings(s, doReset = true) {
 }
 
 function persist() {
-  saveToLocal({
-    version: 1,
-    snap: snapshot(),
-  });
+  // Don't persist online game state — it's ephemeral
+  if (isOnlineMode()) return;
+  saveToLocal({ version: 1, snap: snapshot() });
 }
 
 function loadPersisted() {
@@ -202,6 +221,8 @@ function loadPersisted() {
   restoreSnap(saved.snap);
   return true;
 }
+
+// ─── Status bar ────────────────────────────────────────────────────────────
 
 function activeBoardText() {
   if (state.activeBoard === -1) return "Plateau actif : libre";
@@ -212,6 +233,13 @@ function currentPlayersInfo() {
   const mode = elMode.value;
   const diff = elDifficulty.value;
   const aiType = elAiType.value.toUpperCase();
+
+  if (mode === "online") {
+    const sym = onlineSymbol ?? "?";
+    elPlayerHint.textContent = `Tu joues : ${sym}`;
+    elAiHint.textContent = `Adversaire : ${otherSym(sym)}`;
+    return;
+  }
 
   if (mode === "hvh") {
     elPlayerHint.textContent = `Joueur 1: X • Joueur 2: O`;
@@ -237,15 +265,16 @@ function setStatus() {
   else if (state.bigWinner === DRAW) elStatus.textContent = "Fin : match nul.";
   else {
     const forced = (state.activeBoard !== -1 && state.smallWinners[state.activeBoard] === EMPTY);
-    const where = forced ? `dans le plateau #${state.activeBoard + 1}` : "n’importe où (LIBRE)";
+    const where = forced ? `dans le plateau #${state.activeBoard + 1}` : "n'importe où (LIBRE)";
     elStatus.textContent = `Tour : ${vToChar(state.turn)} • Jouer ${where}`;
   }
 
   elActiveHint.textContent = activeBoardText();
   currentPlayersInfo();
 
-  elUndo.disabled = past.length === 0 || busy || replayStates;
-  elRedo.disabled = future.length === 0 || busy || replayStates;
+  const inReplay = !!replayStates;
+  elUndo.disabled = past.length === 0 || busy || inReplay || isOnlineMode();
+  elRedo.disabled = future.length === 0 || busy || inReplay || isOnlineMode();
 }
 
 function recordMoveText(move, playerVal) {
@@ -274,16 +303,10 @@ function endIfNeeded() {
 
 function computeSuggestions() {
   if (!elAnalysis.checked) return { top: [], map: null };
-
-  // whose best moves to show?
-  // In HVA show human-turn suggestions (help) OR AI-turn suggestions? We'll show current player suggestions.
-  const aiSymbol = vToChar(state.turn); // suggest for current player
+  const aiSymbol = vToChar(state.turn);
   const top = getTopMoves(state, aiSymbol, elAiType.value, elDifficulty.value, Number(elAiTimeLimit.value), 3);
-
-  // normalize into heatmap alpha: higher is stronger
   const map = new Map();
   if (top.length) {
-    // rank-based alpha: 1st 1.0, 2nd 0.6, 3rd 0.35
     const alphas = [1.0, 0.6, 0.35];
     top.forEach((t, i) => map.set(`${t.move.sb},${t.move.c}`, alphas[i] ?? 0.25));
   }
@@ -321,13 +344,20 @@ function resetGame(keepSettings = true) {
   buildBoardDOM(elBoard, onClick);
   rerender();
   persist();
-  maybeAutoPlay();
+
+  if (!isOnlineMode()) maybeAutoPlay();
 }
+
+// ─── Human click ───────────────────────────────────────────────────────────
 
 function canHumanPlay(playerVal) {
   const mode = elMode.value;
   if (mode === "ava") return false;
   if (mode === "hvh") return true;
+  if (mode === "online") {
+    if (!onlineSession?.isConnected) return false;
+    return playerVal === symToVal(onlineSymbol);
+  }
   const humanVal = symToVal(elHumanSymbol.value);
   return playerVal === humanVal;
 }
@@ -344,6 +374,12 @@ function onClick(sb, c) {
 
   const playerVal = state.turn;
   if (!canHumanPlay(playerVal)) return;
+
+  // In online mode, send to server first — optimistic local update below
+  if (isOnlineMode()) {
+    handleOnlineMove({ sb, c }, onlineSymbol);
+    return;
+  }
 
   pushPast();
   const move = { sb, c };
@@ -366,11 +402,164 @@ function onClick(sb, c) {
   maybeAutoPlay();
 }
 
+// ─── Online move handling ─────────────────────────────────────────────────
+
+async function handleOnlineMove(move, symbol) {
+  if (busy) return;
+
+  const playerVal = symToVal(symbol);
+  const expectedTurn = state.turn;
+
+  if (playerVal !== expectedTurn) {
+    showToast("Ce n'est pas ton tour.");
+    return;
+  }
+
+  // Optimistic local apply
+  const res = applyMove(state, move, playerVal);
+  if (!res.ok) {
+    explainIllegal(res.reason);
+    return;
+  }
+
+  const playerSym = vToChar(playerVal);
+  moveList.push({ sb: move.sb, c: move.c, player: playerSym });
+  log.push(recordMoveText(move, playerVal));
+  updateLogUI();
+  rerender();
+  endIfNeeded();
+
+  // Send to server (fire-and-forget; errors shown via toast)
+  try {
+    await onlineSession.sendMove(move);
+  } catch (err) {
+    showToast(`Erreur réseau : ${err.message}`);
+  }
+}
+
+function applyOpponentMove(move, symbol) {
+  const playerVal = symToVal(symbol);
+
+  if (playerVal !== state.turn) {
+    // Out-of-turn message — ignore (could be a duplicate)
+    return;
+  }
+
+  const res = applyMove(state, move, playerVal);
+  if (!res.ok) {
+    showToast("Coup invalide reçu de l'adversaire.");
+    return;
+  }
+
+  const playerSym = vToChar(playerVal);
+  moveList.push({ sb: move.sb, c: move.c, player: playerSym });
+  log.push(recordMoveText(move, playerVal));
+  updateLogUI();
+  rerender();
+  endIfNeeded();
+}
+
+// ─── Online UI ────────────────────────────────────────────────────────────
+
+function setRoomStatus(msg, type = "info") {
+  elRoomStatus.textContent = msg;
+  elRoomStatus.className = `room-status room-status--${type}`;
+}
+
+function showOnlinePanel(show) {
+  elOnlinePanel.classList.toggle("hidden", !show);
+}
+
+function updateOnlineControls(connected) {
+  elCreateRoom.disabled = connected;
+  elJoinRoom.disabled = connected;
+  elRoomCodeInput.disabled = connected;
+  elLeaveRoom.classList.toggle("hidden", !connected);
+  elRoomIdRow.classList.toggle("hidden", !connected);
+}
+
+async function onCreateRoom() {
+  elCreateRoom.disabled = true;
+  setRoomStatus("Création de la room…", "info");
+
+  try {
+    const data = await createRoom();
+    onlineSymbol = data.playerSymbol; // "X"
+
+    onlineSession = new OnlineSession(data);
+    onlineSession.onMove = ({ symbol, move }) => applyOpponentMove(move, symbol);
+    onlineSession.onPresence = ({ opponentPresent }) => {
+      if (opponentPresent) {
+        setRoomStatus("Adversaire connecté ! À vous de jouer.", "ok");
+      } else {
+        setRoomStatus("En attente de l'adversaire…", "waiting");
+      }
+    };
+    onlineSession.onError = (err) => showToast(`Erreur : ${err.message}`);
+
+    await onlineSession.connect();
+
+    elRoomId.textContent = data.roomId;
+    setRoomStatus("En attente de l'adversaire…", "waiting");
+    updateOnlineControls(true);
+
+    resetGame(true);
+  } catch (err) {
+    setRoomStatus(`Erreur : ${err.message}`, "error");
+    elCreateRoom.disabled = false;
+  }
+}
+
+async function onJoinRoom() {
+  const roomId = elRoomCodeInput.value.trim().toUpperCase();
+  if (!roomId) { showToast("Saisis le code de la room."); return; }
+
+  elJoinRoom.disabled = true;
+  setRoomStatus("Connexion…", "info");
+
+  try {
+    const data = await joinRoom(roomId);
+    onlineSymbol = data.playerSymbol; // "O"
+
+    onlineSession = new OnlineSession(data);
+    onlineSession.onMove = ({ symbol, move }) => applyOpponentMove(move, symbol);
+    onlineSession.onPresence = ({ opponentPresent }) => {
+      if (opponentPresent) {
+        setRoomStatus("Connecté ! À vous de jouer.", "ok");
+      } else {
+        setRoomStatus("Connexion perdue.", "error");
+      }
+    };
+    onlineSession.onError = (err) => showToast(`Erreur : ${err.message}`);
+
+    await onlineSession.connect();
+
+    elRoomId.textContent = data.roomId;
+    setRoomStatus("Connecté ! X commence.", "ok");
+    updateOnlineControls(true);
+
+    resetGame(true);
+  } catch (err) {
+    setRoomStatus(`Erreur : ${err.message}`, "error");
+    elJoinRoom.disabled = false;
+  }
+}
+
+function onLeaveRoom() {
+  onlineSession?.disconnect();
+  onlineSession = null;
+  onlineSymbol = null;
+  updateOnlineControls(false);
+  setRoomStatus("", "info");
+  elRoomId.textContent = "";
+  showToast("Room quittée.");
+}
+
+// ─── AI ───────────────────────────────────────────────────────────────────
+
 function aiSymbolForTurn() {
   const mode = elMode.value;
-
   if (mode === "ava") return vToChar(state.turn);
-
   if (mode === "hva") {
     const human = elHumanSymbol.value;
     return otherSym(human);
@@ -382,14 +571,7 @@ async function aiPlayOneTurn(aiSymbol) {
   const aiType = elAiType.value;
   const timeLimitMs = Number(elAiTimeLimit.value);
 
-  const { move, stats } = chooseAiMoveWithStats(
-    state,
-    aiSymbol,
-    aiType,
-    elDifficulty.value,
-    timeLimitMs
-  );
-
+  const { move, stats } = chooseAiMoveWithStats(state, aiSymbol, aiType, elDifficulty.value, timeLimitMs);
   if (!move) return;
 
   const playerVal = state.turn;
@@ -413,6 +595,7 @@ async function maybeAutoPlay() {
   if (paused) return;
   if (busy || replayStates) return;
   if (state.bigWinner !== EMPTY) return;
+  if (isOnlineMode()) return;
 
   const mode = elMode.value;
   if (mode === "hvh") return;
@@ -439,7 +622,6 @@ async function maybeAutoPlay() {
 
   busy = false;
   setStatus();
-
   persist();
 
   if (!ended && mode === "ava") {
@@ -447,9 +629,10 @@ async function maybeAutoPlay() {
   }
 }
 
-// Undo/Redo
+// ─── Undo / Redo ──────────────────────────────────────────────────────────
+
 function undo() {
-  if (busy || replayStates) return;
+  if (busy || replayStates || isOnlineMode()) return;
   if (!past.length) return;
   future.push(snapshot());
   const snap = past.pop();
@@ -457,7 +640,7 @@ function undo() {
   persist();
 }
 function redo() {
-  if (busy || replayStates) return;
+  if (busy || replayStates || isOnlineMode()) return;
   if (!future.length) return;
   past.push(snapshot());
   const snap = future.pop();
@@ -466,7 +649,6 @@ function redo() {
   maybeAutoPlay();
 }
 
-// Pause/Play
 function togglePause() {
   paused = !paused;
   elPlayPause.textContent = paused ? "Play" : "Pause";
@@ -474,7 +656,8 @@ function togglePause() {
   if (!paused) maybeAutoPlay();
 }
 
-// Replay
+// ─── Replay ───────────────────────────────────────────────────────────────
+
 function startReplay() {
   if (!moveList.length) { showToast("Aucun coup à rejouer."); return; }
   stopReplay();
@@ -514,15 +697,13 @@ function replayPlayToggle() {
 
   replayTimer = setInterval(() => {
     if (!replayStates) return;
-    if (replayIndex >= replayStates.length - 1) {
-      replayPlayToggle();
-      return;
-    }
+    if (replayIndex >= replayStates.length - 1) { replayPlayToggle(); return; }
     replayGo(replayIndex + 1);
   }, stepMs);
 }
 
-// Export/Import
+// ─── Export / Import ──────────────────────────────────────────────────────
+
 function exportGame() {
   const payload = { snap: snapshot() };
   const code = encodeShare(payload);
@@ -542,18 +723,20 @@ function importGame() {
   }
 }
 
-// Simulation IA vs IA
+// ─── Simulation ───────────────────────────────────────────────────────────
+
 async function simulateGames(n) {
   if (busy || replayStates) return;
   showToast(`Simulation ${n}…`);
   const savedSeries = { ...series };
   const savedSettings = getSettings();
 
-  // Force AVA during simulation (no UI changes persisted)
   const mode = elMode.value;
   elMode.value = "ava";
 
   let winsX = 0, winsO = 0, draws = 0;
+
+  // Yield to the event loop between games to avoid freezing the UI
   for (let i = 0; i < n; i++) {
     let s = createInitialState();
     s.turn = X;
@@ -567,9 +750,11 @@ async function simulateGames(n) {
     if (s.bigWinner === X) winsX++;
     else if (s.bigWinner === O) winsO++;
     else draws++;
+
+    // Yield every 10 games to keep the UI responsive
+    if (i % 10 === 9) await new Promise(r => setTimeout(r, 0));
   }
 
-  // restore
   elMode.value = mode;
   series = savedSeries;
   applySettings(savedSettings, false);
@@ -578,7 +763,8 @@ async function simulateGames(n) {
   showToast(`Résultat: X ${winsX} • O ${winsO} • = ${draws}`);
 }
 
-// Keyboard shortcuts
+// ─── Keyboard ─────────────────────────────────────────────────────────────
+
 window.addEventListener("keydown", (e) => {
   const tag = e.target?.tagName;
   if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
@@ -589,7 +775,8 @@ window.addEventListener("keydown", (e) => {
   if (k === " ") { e.preventDefault(); togglePause(); }
 });
 
-// Events
+// ─── Events ───────────────────────────────────────────────────────────────
+
 elRestart.addEventListener("click", () => resetGame(true));
 elResetAll.addEventListener("click", () => resetGame(false));
 elOverlayRestart.addEventListener("click", () => resetGame(true));
@@ -598,7 +785,17 @@ elUndo.addEventListener("click", undo);
 elRedo.addEventListener("click", redo);
 elPlayPause.addEventListener("click", togglePause);
 
-elMode.addEventListener("change", () => { resetGame(true); persist(); });
+elMode.addEventListener("change", () => {
+  const isOnline = elMode.value === "online";
+  showOnlinePanel(isOnline);
+  if (!isOnline) {
+    // Leave any active online session when switching away
+    if (onlineSession) onLeaveRoom();
+    resetGame(true);
+  }
+  persist();
+});
+
 elHumanSymbol.addEventListener("change", () => { resetGame(true); persist(); });
 elAiType.addEventListener("change", () => { currentPlayersInfo(); setStatus(); persist(); });
 elDifficulty.addEventListener("change", () => { currentPlayersInfo(); setStatus(); persist(); });
@@ -611,14 +808,12 @@ elAiTimeLimit.addEventListener("input", () => {
 
 elAnalysis.addEventListener("change", () => rerender());
 
-// Replay buttons
+// Replay
 elReplayStart.addEventListener("click", () => replayGo(0));
 elReplayPrev.addEventListener("click", () => replayGo(replayIndex - 1));
 elReplayNext.addEventListener("click", () => replayGo(replayIndex + 1));
 elReplayEnd.addEventListener("click", () => replayGo((replayStates?.length ?? 1) - 1));
 elReplayPlay.addEventListener("click", replayPlayToggle);
-
-// Start replay automatically when user clicks first time on replay controls? (optional)
 elReplayStart.addEventListener("dblclick", startReplay);
 
 // Simulate
@@ -630,11 +825,22 @@ elExport.addEventListener("click", exportGame);
 elImport.addEventListener("click", importGame);
 elClearSave.addEventListener("click", () => { clearLocal(); showToast("Sauvegarde effacée."); });
 
-// Init
+// Online
+elCreateRoom.addEventListener("click", onCreateRoom);
+elJoinRoom.addEventListener("click", onJoinRoom);
+elLeaveRoom.addEventListener("click", onLeaveRoom);
+elCopyRoom.addEventListener("click", () => {
+  const code = elRoomId.textContent;
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => showToast("Code copié !")).catch(() => showToast(code));
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+
 buildBoardDOM(elBoard, onClick);
 updateSeriesUI();
+showOnlinePanel(false);
 
-// load saved session if exists
 if (!loadPersisted()) {
   resetGame(true);
 } else {

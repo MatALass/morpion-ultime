@@ -2,6 +2,9 @@
   "name": "ultimate-ttt",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "ably": "^2.5.0"
+  },
   "devDependencies": {
     "eslint": "^9.9.1",
     "@eslint/js": "^9.9.1",
