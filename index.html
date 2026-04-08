@@ -3,45 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Morpion Ultime — jeu de stratégie cartoon avec IA, duel en ligne et replay." />
-    <meta property="og:title" content="🎮 Morpion Ultime" />
+    <meta name="description" content="Morpion Ultime — jeu de stratégie avec IA, duel en ligne et replay." />
+    <meta property="og:title" content="Morpion Ultime" />
     <meta property="og:description" content="Morpion Ultime avec IA, duel en ligne et outils d'analyse." />
     <meta property="og:type" content="website" />
-    <title>🎮 Morpion Ultime</title>
+    <title>Morpion Ultime</title>
     <link rel="stylesheet" href="./css/style.css" />
   </head>
 
   <body>
+    <!-- ═══════ HEADER ═══════ -->
     <header class="top">
-      <h1>Morpion Ultime</h1>
+
+      <h1>
+        <!-- Icône grille SVG -->
+        <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="1" y="1" width="34" height="34" rx="8" fill="#EEF0FF" stroke="#1A1A2E" stroke-width="2.5"/>
+          <line x1="12" y1="4" x2="12" y2="32" stroke="#1A1A2E" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="24" y1="4" x2="24" y2="32" stroke="#1A1A2E" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="4" y1="12" x2="32" y2="12" stroke="#1A1A2E" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="4" y1="24" x2="32" y2="24" stroke="#1A1A2E" stroke-width="2.5" stroke-linecap="round"/>
+          <!-- X en haut à gauche -->
+          <line x1="6" y1="6" x2="10" y2="10" stroke="#E8344A" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="10" y1="6" x2="6" y2="10" stroke="#E8344A" stroke-width="2.2" stroke-linecap="round"/>
+          <!-- O au centre -->
+          <circle cx="18" cy="18" r="3.5" stroke="#18A96B" stroke-width="2.2" fill="none"/>
+        </svg>
+        Morpion Ultime
+      </h1>
 
       <section class="controls">
 
         <!-- STATUS -->
-        <div class="status" id="status">Chargement…</div>
+        <div class="status" id="status">
+          <span class="status-dot"></span>
+          Chargement…
+        </div>
 
-        <!-- LIGNE 1 : Réglages principaux -->
-        <div class="row">
+        <!-- SCORE VISUEL -->
+        <div class="score-strip">
+          <div class="score-cap x" id="seriesHint">
+            <svg viewBox="0 0 14 14" fill="none"><line x1="2" y1="2" x2="12" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="2" x2="2" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+            0
+          </div>
+          <div class="score-cap d">
+            <svg viewBox="0 0 14 14" fill="none"><line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+            0
+          </div>
+          <div class="score-cap o">
+            <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="2.5" fill="none"/></svg>
+            0
+          </div>
+        </div>
+
+        <!-- LIGNE 1 : Réglages -->
+        <div class="row" style="margin-top:10px;">
           <label>
-            🎮 Mode :
+            Mode
             <select id="mode">
-              <option value="hva" selected>👤 vs 🤖 IA</option>
-              <option value="hvh">👤 vs 👤 Duel local</option>
-              <option value="ava">🤖 vs 🤖 Spectateur</option>
-              <option value="online">🌐 Duel en ligne</option>
+              <option value="hva" selected>Joueur vs IA</option>
+              <option value="hvh">Joueur vs Joueur</option>
+              <option value="ava">IA vs IA</option>
+              <option value="online">Duel en ligne</option>
             </select>
           </label>
 
           <label>
-            Je joue :
+            Je joue
             <select id="humanSymbol">
-              <option value="X" selected>❌ X</option>
-              <option value="O">⭕ O</option>
+              <option value="X" selected>X</option>
+              <option value="O">O</option>
             </select>
           </label>
 
           <label>
-            🤖 IA :
+            IA
             <select id="aiType">
               <option value="minimax" selected>Minimax</option>
               <option value="mcts">MCTS</option>
@@ -49,24 +85,39 @@
           </label>
 
           <label>
-            💪 Difficulté :
+            Niveau
             <select id="difficulty">
-              <option value="easy">😊 Facile</option>
-              <option value="medium" selected>😐 Moyen</option>
-              <option value="hard">😤 Difficile</option>
+              <option value="easy">Facile</option>
+              <option value="medium" selected>Moyen</option>
+              <option value="hard">Difficile</option>
             </select>
           </label>
         </div>
 
         <!-- LIGNE 2 : Actions -->
         <div class="row">
-          <button id="restart" title="Nouvelle partie (N)">🔄 Recommencer</button>
-          <button id="undo" title="Annuler (U)">↩️ Annuler</button>
-          <button id="redo" title="Refaire (R)">↪️ Refaire</button>
-          <button id="playPause" title="Pause/Play (Espace)">⏸ Pause</button>
+          <button id="restart" title="Nouvelle partie (N)">
+            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8,0.5 10.5,2.5 8,4.5" fill="currentColor"/></svg>
+            Recommencer
+          </button>
+
+          <button id="undo" title="Annuler (U)">
+            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><path d="M2.5 8A5.5 5.5 0 1 0 8 2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8,0.5 5.5,2.5 8,4.5" fill="currentColor"/></svg>
+            Annuler
+          </button>
+
+          <button id="redo" title="Refaire (R)">
+            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8,0.5 10.5,2.5 8,4.5" fill="currentColor"/></svg>
+            Refaire
+          </button>
+
+          <button id="playPause" title="Pause/Play (Espace)">
+            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><rect x="2" y="2" width="4" height="12" rx="1" fill="currentColor"/><rect x="10" y="2" width="4" height="12" rx="1" fill="currentColor"/></svg>
+            Pause
+          </button>
 
           <label>
-            Vitesse :
+            Vitesse
             <select id="speed">
               <option value="1" selected>x1</option>
               <option value="2">x2</option>
@@ -75,119 +126,163 @@
             </select>
           </label>
 
-          <button id="resetAll" title="Réinitialiser tout">🗑️ Reset total</button>
+          <button id="resetAll" title="Réinitialiser tout">
+            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><polyline points="2,4 14,4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v5M10 7v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="3" y="4" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>
+            Reset
+          </button>
         </div>
 
-        <!-- LIGNE 3 : Infos en temps réel -->
+        <!-- LIGNE 3 : Infos live -->
         <div class="row small">
-          <div class="chip" id="activeHint">📍 Plateau actif : —</div>
-          <div class="chip" id="playerHint">🎲 Joueur : —</div>
-          <div class="chip" id="aiHint">🤖 IA : —</div>
-          <div class="chip" id="seriesHint">📊 X 0 • O 0 • = 0</div>
+          <div class="chip" id="activeHint">
+            <svg viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="2"/><line x1="6.5" y1="3.5" x2="6.5" y2="6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="6.5" cy="9" r="1" fill="currentColor"/></svg>
+            Plateau : —
+          </div>
+          <div class="chip" id="playerHint">
+            <svg viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="4.5" r="2.5" stroke="currentColor" stroke-width="2"/><path d="M2 11.5a4.5 4.5 0 0 1 9 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Joueur : —
+          </div>
+          <div class="chip" id="aiHint">
+            <svg viewBox="0 0 13 13" fill="none"><rect x="2" y="4" width="9" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="5" cy="7.5" r="1" fill="currentColor"/><circle cx="8" cy="7.5" r="1" fill="currentColor"/><path d="M5 4V2.5M8 4V2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="6.5" x2="2" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="11" y1="6.5" x2="12" y2="6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            IA : —
+          </div>
         </div>
 
         <!-- LIGNE 4 : Options avancées -->
         <div class="row small" style="margin-top:10px;">
           <label class="toggle">
             <input type="checkbox" id="analysis" />
-            🔍 Voir les meilleurs coups
+            Afficher les meilleurs coups
           </label>
 
           <label class="range">
-            ⏱ Temps IA :
+            Temps IA
             <input id="aiTimeLimit" type="range" min="50" max="1500" step="50" value="250" />
             <span id="aiTimeLimitLabel">250</span> ms
           </label>
         </div>
 
-        <!-- LIGNE 5 : Replay -->
+        <!-- LIGNE 5 : Replay + Simulation -->
         <div class="row small" style="margin-top:8px;">
-          <span style="font-weight:800;font-size:12px;color:var(--muted);">📼 Replay :</span>
-          <button id="replayStart" title="Début">⏮</button>
-          <button id="replayPrev" title="Coup précédent">⏪</button>
-          <button id="replayNext" title="Coup suivant">⏩</button>
-          <button id="replayEnd" title="Fin">⏭</button>
-          <button id="replayPlay" title="Lecture">▶</button>
+          <span class="row-label">Replay</span>
+          <button id="replayStart" title="Début">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><polyline points="13,2 5,8 13,14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="3" y1="2" x2="3" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button id="replayPrev" title="Coup précédent">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><polyline points="10,2 4,8 10,14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="replayNext" title="Coup suivant">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><polyline points="6,2 12,8 6,14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="replayEnd" title="Fin">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><polyline points="3,2 11,8 3,14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="13" y1="2" x2="13" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button id="replayPlay" title="Lecture">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><polygon points="3,1 14,8 3,15" fill="currentColor"/></svg>
+          </button>
 
-          <button id="simulate100" title="Simuler 100 parties IA vs IA">🔬 ×100</button>
-          <button id="simulate1000" title="Simuler 1000 parties IA vs IA">🔬 ×1000</button>
+          <span class="row-label" style="margin-left:6px;">Simulation IA</span>
+          <button id="simulate100" title="Simuler 100 parties IA vs IA">×100</button>
+          <button id="simulate1000" title="Simuler 1000 parties IA vs IA">×1000</button>
         </div>
 
         <!-- PARTAGE -->
         <details class="share">
-          <summary>📤 Partager / Importer une partie</summary>
+          <summary>
+            <svg viewBox="0 0 14 14" fill="none" width="14" height="14"><circle cx="11" cy="3" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="3" cy="7" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="11" cy="11" r="2" stroke="currentColor" stroke-width="1.8"/><line x1="4.8" y1="6" x2="9.2" y2="4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="4.8" y1="8" x2="9.2" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Partager / Importer une partie
+          </summary>
           <div class="share-grid">
             <textarea id="shareCode" rows="3" placeholder="Code de partie…"></textarea>
             <div class="share-actions">
-              <button id="exportBtn">📤 Exporter</button>
-              <button id="importBtn">📥 Importer</button>
-              <button id="clearSaveBtn">🗑 Effacer</button>
+              <button id="exportBtn">Exporter</button>
+              <button id="importBtn">Importer</button>
+              <button id="clearSaveBtn">Effacer la sauvegarde</button>
             </div>
           </div>
-          <p class="hint">
-            ⌨️ Raccourcis : <b>U</b> Annuler • <b>R</b> Refaire • <b>N</b> Nouvelle partie • <b>Espace</b> Pause/Play
-          </p>
+          <p class="hint">Raccourcis : <b>U</b> Annuler • <b>R</b> Refaire • <b>N</b> Nouvelle partie • <b>Espace</b> Pause/Play</p>
         </details>
 
         <!-- PANEL EN LIGNE -->
         <div id="onlinePanel" class="online-panel hidden">
           <div class="online-panel__header">
-            <span class="online-panel__title">🌐 Duel en ligne</span>
-            <button id="leaveRoomBtn" class="hidden btn-danger">🚪 Quitter</button>
+            <span class="online-panel__title">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M8 1.5C8 1.5 6 4 6 8s2 6.5 2 6.5M8 1.5C8 1.5 10 4 10 8s-2 6.5-2 6.5M1.5 8h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              Duel en ligne
+            </span>
+            <button id="leaveRoomBtn" class="hidden btn-danger">
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M10 12l4-4-4-4M14 8H6M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Quitter
+            </button>
           </div>
 
           <div id="reconnectBanner" class="reconnect-banner hidden">
             <span id="reconnectText">Partie en cours détectée…</span>
-            <button id="reconnectBtn" class="btn-primary">▶ Reprendre</button>
+            <button id="reconnectBtn" class="btn-primary">Reprendre</button>
             <button id="reconnectDismiss" class="btn-ghost">Ignorer</button>
           </div>
 
           <div class="online-panel__body">
             <div class="online-pseudo-row">
-              <label for="pseudoInput">👤 Pseudo :</label>
-              <input id="pseudoInput" type="text" placeholder="Ton pseudo" maxlength="16" spellcheck="false" autocomplete="off" />
+              <label for="pseudoInput">Pseudo</label>
+              <input id="pseudoInput" type="text" placeholder="Ton pseudo…" maxlength="16" spellcheck="false" autocomplete="off" />
             </div>
 
             <div class="online-create-join">
-              <button id="createRoomBtn" class="btn-primary">🏠 Créer une room</button>
+              <button id="createRoomBtn" class="btn-primary">
+                <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><line x1="8" y1="5" x2="8" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Créer une room
+              </button>
               <span class="online-sep">ou</span>
-              <input id="roomCodeInput" type="text" placeholder="Code (ex: A3F7)" maxlength="6" spellcheck="false" autocomplete="off" />
-              <button id="joinRoomBtn" class="btn-primary">🔗 Rejoindre</button>
+              <input id="roomCodeInput" type="text" placeholder="Code room…" maxlength="6" spellcheck="false" autocomplete="off" />
+              <button id="joinRoomBtn" class="btn-primary">
+                <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 12l4-4-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Rejoindre
+              </button>
             </div>
 
             <div id="onlineRoomIdRow" class="online-room-id hidden">
-              <span>🔑 Code à partager :</span>
+              <span>Code</span>
               <strong id="roomIdDisplay" class="room-code">—</strong>
-              <button id="copyRoomBtn">📋 Copier</button>
+              <button id="copyRoomBtn">
+                <svg viewBox="0 0 14 14" fill="none" width="13" height="13"><rect x="4" y="1" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="1" y="4" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="white"/></svg>
+                Copier
+              </button>
             </div>
 
             <div id="roomStatus" class="room-status"></div>
           </div>
 
-          <p class="hint">
-            Crée une room et envoie le code à ton adversaire !
-          </p>
+          <p class="hint">Crée une room et partage le code à ton adversaire.</p>
         </div>
 
       </section>
     </header>
 
+    <!-- ═══════ MAIN ═══════ -->
     <main class="layout">
+
       <div class="left">
-        <!-- PLATEAU DE JEU -->
+        <!-- Plateau principal -->
         <div id="board" class="big-board" aria-label="Plateau de jeu"></div>
 
-        <!-- ANALYSE -->
-        <section class="panel" id="analysisPanel" style="margin-top:0;">
-          <h2>🔍 Meilleurs coups (Top 3)</h2>
+        <!-- Analyse -->
+        <section class="panel">
+          <h2>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M2 12l3.5-4 3 2.5L12 5l2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="5" r="1.5" fill="currentColor"/></svg>
+            Meilleurs coups (Top 3)
+          </h2>
           <ol id="topMoves" class="log"></ol>
         </section>
       </div>
 
-      <!-- SIDEBAR -->
+      <!-- Sidebar -->
       <aside class="right">
         <section class="panel">
-          <h2>🤖 Stats IA</h2>
+          <h2>
+            <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="10" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="6.5" cy="9" r="1" fill="currentColor"/><circle cx="9.5" cy="9" r="1" fill="currentColor"/><path d="M6 4V2.5M10 4V2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="7" x2="2" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Stats IA
+          </h2>
           <div class="kv">
             <div class="k">Dernier coup</div><div class="v" id="aiMove">—</div>
             <div class="k">Temps</div><div class="v" id="aiTime">—</div>
@@ -195,52 +290,35 @@
             <div class="k">Nœuds</div><div class="v" id="aiNodes">—</div>
             <div class="k">Cache</div><div class="v" id="aiCache">—</div>
           </div>
-          <div class="note">Stats mises à jour quand l'IA joue.</div>
+          <div class="note">Mis à jour après chaque coup de l'IA.</div>
         </section>
 
         <section class="panel">
-          <h2>📜 Historique des coups</h2>
+          <h2>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h10M2 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Historique
+          </h2>
           <ol id="log" class="log"></ol>
         </section>
       </aside>
 
-      <!-- OVERLAY FIN DE PARTIE -->
+      <!-- Overlay fin de partie -->
       <div id="overlay" class="overlay hidden">
         <div class="overlay-card">
-          <span class="overlay-emoji" id="overlayEmoji">🎉</span>
+          <!-- Icône dynamique injectée par JS -->
+          <div id="overlayIcon" class="overlay-icon"></div>
           <div id="overlayText" class="overlay-text"></div>
-          <button id="overlayRestart">🔄 Rejouer !</button>
+          <button id="overlayRestart">
+            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8,0.5 10.5,2.5 8,4.5" fill="currentColor"/></svg>
+            Rejouer !
+          </button>
         </div>
       </div>
 
-      <!-- TOAST -->
+      <!-- Toast -->
       <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     </main>
 
     <script type="module" src="./js/main.js"></script>
-    <script type="module">
-      // Colorisation X/O dans les cellules au survol du DOM
-      const observer = new MutationObserver(() => {
-        document.querySelectorAll('.cell').forEach(cell => {
-          const txt = cell.textContent.trim();
-          cell.classList.toggle('cell-x', txt === 'X');
-          cell.classList.toggle('cell-o', txt === 'O');
-        });
-      });
-      observer.observe(document.getElementById('board'), { childList: true, subtree: true, characterData: true });
-    </script>
-    <script>
-      // Overlay emoji dynamique
-      const overlayTextEl = document.getElementById('overlayText');
-      const overlayEmojiEl = document.getElementById('overlayEmoji');
-      const overlayObserver = new MutationObserver(() => {
-        const txt = overlayTextEl.textContent || '';
-        if (txt.includes('nul')) overlayEmojiEl.textContent = '🤝';
-        else if (txt.includes('X')) overlayEmojiEl.textContent = '❌';
-        else if (txt.includes('O')) overlayEmojiEl.textContent = '⭕';
-        else overlayEmojiEl.textContent = '🎉';
-      });
-      overlayObserver.observe(overlayTextEl, { childList: true, subtree: true, characterData: true });
-    </script>
   </body>
 </html>

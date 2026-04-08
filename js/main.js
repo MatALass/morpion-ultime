@@ -41,6 +41,7 @@ const elAnalysis = $("analysis");
 
 const elOverlay = $("overlay");
 const elOverlayText = $("overlayText");
+const elOverlayIcon = $("overlayIcon");
 const elOverlayRestart = $("overlayRestart");
 
 const elToast = $("toast");
@@ -179,8 +180,29 @@ function showToast(msg) {
   toastTimer = setTimeout(() => elToast.classList.add("hidden"), 1400);
 }
 
+const SVG_X_OVERLAY = `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="36" cy="36" r="34" fill="#FDEAEC" stroke="#1A1A2E" stroke-width="3"/>
+  <line x1="18" y1="18" x2="54" y2="54" stroke="#E8344A" stroke-width="9" stroke-linecap="round"/>
+  <line x1="54" y1="18" x2="18" y2="54" stroke="#E8344A" stroke-width="9" stroke-linecap="round"/>
+</svg>`;
+
+const SVG_O_OVERLAY = `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="36" cy="36" r="34" fill="#DFF5EC" stroke="#1A1A2E" stroke-width="3"/>
+  <circle cx="36" cy="36" r="18" stroke="#18A96B" stroke-width="9" fill="none"/>
+</svg>`;
+
+const SVG_DRAW_OVERLAY = `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="36" cy="36" r="34" fill="#F5F5F5" stroke="#1A1A2E" stroke-width="3"/>
+  <line x1="18" y1="28" x2="54" y2="28" stroke="#7A7A96" stroke-width="7" stroke-linecap="round"/>
+  <line x1="18" y1="36" x2="54" y2="36" stroke="#7A7A96" stroke-width="7" stroke-linecap="round"/>
+  <line x1="18" y1="44" x2="54" y2="44" stroke="#7A7A96" stroke-width="7" stroke-linecap="round"/>
+</svg>`;
+
 function showOverlay(text) {
   elOverlayText.textContent = text;
+  if (text.includes("X gagne")) elOverlayIcon.innerHTML = SVG_X_OVERLAY;
+  else if (text.includes("O gagne")) elOverlayIcon.innerHTML = SVG_O_OVERLAY;
+  else elOverlayIcon.innerHTML = SVG_DRAW_OVERLAY;
   elOverlay.classList.remove("hidden");
 }
 function hideOverlay() { elOverlay.classList.add("hidden"); }
@@ -193,8 +215,29 @@ function setAiStatsEmpty() {
   elAiCache.textContent = "—";
 }
 
+// Capsules score dans le header (3 éléments côte à côte dans .score-strip)
+const elScoreCaps = (() => {
+  const strip = elSeriesHint?.parentElement;
+  if (!strip) return null;
+  const caps = strip.querySelectorAll('.score-cap');
+  return { x: caps[0], d: caps[1], o: caps[2] };
+})();
+
 function updateSeriesUI() {
+  // Texte brut de fallback dans seriesHint (pour compatibilité)
   elSeriesHint.textContent = `Série: X ${series.X} • O ${series.O} • = ${series.D}`;
+  // Mise à jour des capsules visuelles
+  if (elScoreCaps) {
+    // On garde le SVG et on remplace juste le nœud texte
+    const setText = (cap, val) => {
+      const last = cap.lastChild;
+      if (last && last.nodeType === 3) last.textContent = ' ' + val;
+      else cap.appendChild(document.createTextNode(' ' + val));
+    };
+    setText(elScoreCaps.x, series.X);
+    setText(elScoreCaps.d, series.D);
+    setText(elScoreCaps.o, series.O);
+  }
 }
 
 function updateLogUI() {
