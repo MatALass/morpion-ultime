@@ -12,13 +12,12 @@ function toRoomId(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-function now() {
-  return Date.now();
+function lastActivityAt(meta) {
+  return Number(meta?.updatedAt ?? meta?.createdAt ?? 0);
 }
 
 function isExpired(meta) {
-  const lastActivityAt = meta?.updatedAt ?? meta?.createdAt ?? 0;
-  return !lastActivityAt || now() - lastActivityAt > ROOM_TTL_MS;
+  return !lastActivityAt(meta) || Date.now() - lastActivityAt(meta) > ROOM_TTL_MS;
 }
 
 async function readRoomMeta(ably, roomId) {
@@ -45,27 +44,16 @@ async function buildTokenRequest(ably, roomId, playerSymbol, playerToken) {
     clientId: `${roomId}:${playerSymbol}:${playerToken}`,
     capability: {
       [`room:${roomId}`]: ["publish", "subscribe", "presence"],
-      [`room-meta:${roomId}`]: ["subscribe", "publish"],
+      [`room-meta:${roomId}`]: ["subscribe"],
     },
   });
-}
-
-function validatePlayer(meta, playerSymbol, playerToken) {
-  if (!["X", "O"].includes(playerSymbol)) return false;
-  const expectedToken = playerSymbol === "X" ? meta?.hostToken : meta?.guestToken;
-  return Boolean(expectedToken) && expectedToken === playerToken;
 }
 
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const {
-    action,
-    roomId: requestedRoom,
-    playerToken,
-    playerSymbol,
-  } = req.body ?? {};
+  const { action, roomId: requestedRoom, playerToken, playerSymbol } = req.body ?? {};
 
   if (!process.env.ABLY_API_KEY) {
     return res.status(500).json({ error: "ABLY_API_KEY not configured" });
@@ -76,12 +64,12 @@ module.exports = async function handler(req, res) {
   if (action === "create") {
     const roomId = genId(6);
     const hostToken = genId(16);
-    const ts = now();
+    const now = Date.now();
 
     const meta = {
       roomId,
-      createdAt: ts,
-      updatedAt: ts,
+      createdAt: now,
+      updatedAt: now,
       hostToken,
       guestToken: null,
     };
@@ -108,9 +96,8 @@ module.exports = async function handler(req, res) {
     const guestToken = genId(16);
     const nextMeta = {
       ...meta,
-      roomId,
       guestToken,
-      updatedAt: now(),
+      updatedAt: Date.now(),
     };
 
     await writeRoomMeta(ably, roomId, nextMeta);
@@ -125,33 +112,32 @@ module.exports = async function handler(req, res) {
 
   if (action === "reconnect") {
     const roomId = toRoomId(requestedRoom);
-    const normalizedSymbol = String(playerSymbol ?? "").trim().toUpperCase();
-
-    if (!roomId || !playerToken || !normalizedSymbol) {
+    if (!roomId || !playerToken || !playerSymbol) {
       return res.status(400).json({ error: "roomId, playerToken and playerSymbol are required" });
     }
-    if (!["X", "O"].includes(normalizedSymbol)) {
+    if (!["X", "O"].includes(playerSymbol)) {
       return res.status(400).json({ error: "Invalid symbol" });
     }
 
     const meta = await readRoomMeta(ably, roomId);
     if (!meta) return res.status(404).json({ error: "Room not found" });
     if (isExpired(meta)) return res.status(410).json({ error: "Room expired" });
-    if (!validatePlayer(meta, normalizedSymbol, playerToken)) {
+
+    const expectedToken = playerSymbol === "X" ? meta.hostToken : meta.guestToken;
+    if (!expectedToken || expectedToken !== playerToken) {
       return res.status(403).json({ error: "Invalid token" });
     }
 
     await writeRoomMeta(ably, roomId, {
       ...meta,
-      roomId,
-      updatedAt: now(),
+      updatedAt: Date.now(),
     });
 
     return res.status(200).json({
       roomId,
       playerToken,
-      playerSymbol: normalizedSymbol,
-      ablyTokenRequest: await buildTokenRequest(ably, roomId, normalizedSymbol, playerToken),
+      playerSymbol,
+      ablyTokenRequest: await buildTokenRequest(ably, roomId, playerSymbol, playerToken),
     });
   }
 

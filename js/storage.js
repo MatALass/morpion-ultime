@@ -2,6 +2,29 @@
 const KEY = "ultimate-ttt-save-v1";
 const ONLINE_KEY = "ultimate-ttt-online-v1";
 
+function safeParse(raw) {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeMove(move) {
+  if (!move || typeof move !== "object") return null;
+  const sb = Number(move.sb);
+  const c = Number(move.c);
+  const player = move.player === "X" || move.player === "O" ? move.player : null;
+  if (!Number.isInteger(sb) || !Number.isInteger(c) || !player) return null;
+  if (sb < 0 || sb > 8 || c < 0 || c > 8) return null;
+  return {
+    sb,
+    c,
+    player,
+    pseudo: String(move.pseudo ?? "").trim(),
+  };
+}
+
 export function saveToLocal(payload) {
   try {
     localStorage.setItem(KEY, JSON.stringify(payload));
@@ -10,8 +33,7 @@ export function saveToLocal(payload) {
 
 export function loadFromLocal() {
   try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : null;
+    return safeParse(localStorage.getItem(KEY));
   } catch {
     return null;
   }
@@ -39,27 +61,25 @@ export function saveOnlineSession(payload) {
 
 export function loadOnlineSession() {
   try {
-    const raw = localStorage.getItem(ONLINE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    const parsed = safeParse(localStorage.getItem(ONLINE_KEY));
     if (!parsed || typeof parsed !== "object") return null;
 
+    const roomId = String(parsed.roomId ?? "").trim().toUpperCase();
+    const playerToken = String(parsed.playerToken ?? "").trim();
+    const playerSymbol = parsed.playerSymbol === "X" || parsed.playerSymbol === "O" ? parsed.playerSymbol : null;
+    if (!roomId || !playerToken || !playerSymbol) return null;
+
+    const moveList = Array.isArray(parsed.moveList)
+      ? parsed.moveList.map(normalizeMove).filter(Boolean)
+      : [];
+
     return {
-      roomId: String(parsed.roomId ?? "").trim().toUpperCase(),
-      playerToken: String(parsed.playerToken ?? "").trim(),
-      playerSymbol: String(parsed.playerSymbol ?? "").trim().toUpperCase(),
-      myPseudo: String(parsed.myPseudo ?? "").trim(),
+      roomId,
+      playerToken,
+      playerSymbol,
+      myPseudo: String(parsed.myPseudo ?? "").trim() || "Joueur",
       opponentPseudo: String(parsed.opponentPseudo ?? "").trim(),
-      moveList: Array.isArray(parsed.moveList)
-        ? parsed.moveList
-            .filter((move) => move && typeof move.sb === "number" && typeof move.c === "number" && ["X", "O"].includes(String(move.player ?? "").toUpperCase()))
-            .map((move) => ({
-              sb: move.sb,
-              c: move.c,
-              player: String(move.player).toUpperCase(),
-              pseudo: String(move.pseudo ?? "").trim(),
-            }))
-        : [],
+      moveList,
     };
   } catch {
     return null;

@@ -17,16 +17,11 @@ async function loadAbly() {
   return window.Ably;
 }
 
-function normalizePresenceMessage(msg) {
-  const action = msg?.action ?? "present";
-  const member = msg?.clientId ? msg : msg?.member ?? null;
-  const data = member?.data ?? msg?.data ?? {};
-
+function normalizePresenceMember(member) {
   return {
-    action,
-    clientId: member?.clientId ?? msg?.clientId ?? "",
-    symbol: data?.symbol ?? "",
-    pseudo: data?.pseudo ?? "",
+    clientId: member?.clientId ?? "",
+    symbol: member?.data?.symbol ?? "",
+    pseudo: String(member?.data?.pseudo ?? "").trim(),
   };
 }
 
@@ -49,11 +44,46 @@ export class OnlineSession {
     this._client = null;
     this._channel = null;
     this._connected = false;
-    this._presenceListener = null;
 
     this.onMove = null;
     this.onPresence = null;
     this.onError = null;
+  }
+
+  async _getPresenceMembers() {
+    return await new Promise((resolve, reject) => {
+      this._channel.presence.get((err, members) => {
+        if (err) {
+          reject(new Error(err?.message ?? "Failed to fetch presence"));
+          return;
+        }
+        resolve(Array.isArray(members) ? members : []);
+      });
+    });
+  }
+
+  async _emitPresenceSnapshot(reason = "snapshot") {
+    if (!this._channel) return;
+
+    try {
+      const members = (await this._getPresenceMembers()).map(normalizePresenceMember);
+      const opponentSymbol = this.playerSymbol === "X" ? "O" : "X";
+      const meClientId = `${this.roomId}:${this.playerSymbol}:${this.playerToken}`;
+      const opponent =
+        members.find((member) => member.symbol === opponentSymbol && member.clientId !== meClientId) ?? null;
+
+      this.onPresence?.({
+        type: "snapshot",
+        reason,
+        count: members.length,
+        opponentPresent: Boolean(opponent),
+        opponentPseudo: opponent?.pseudo ?? "",
+        opponentSymbol,
+        members,
+      });
+    } catch (err) {
+      this.onError?.(err);
+    }
   }
 
   async connect() {
@@ -75,55 +105,35 @@ export class OnlineSession {
 
     this._channel.subscribe("move", (msg) => {
       const { symbol, move } = msg.data ?? {};
+      if (!symbol || !move) return;
       if (symbol === this.playerSymbol) return;
       this.onMove?.({ symbol, move });
     });
-
-    const emitPresenceSnapshot = () => {
-      this._channel.presence.get((err, members) => {
-        if (err) {
-          this.onError?.(new Error(err?.message ?? "Presence lookup failed"));
-          return;
-        }
-
-        const membersList = Array.isArray(members) ? members : [];
-        const opponents = membersList
-          .map((member) => normalizePresenceMessage(member))
-          .filter((member) => member.symbol && member.symbol !== this.playerSymbol);
-        const opponent = opponents[0] ?? null;
-
-        this.onPresence?.({
-          type: "snapshot",
-          count: membersList.length,
-          members: membersList.map((member) => normalizePresenceMessage(member)),
-          opponentPresent: Boolean(opponent),
-          opponentPseudo: opponent?.pseudo ?? "",
-          opponentSymbol: opponent?.symbol ?? (this.playerSymbol === "X" ? "O" : "X"),
-        });
-      });
-    };
-
-    this._presenceListener = (msg) => {
-      const event = normalizePresenceMessage(msg);
-      const isOpponent = Boolean(event.symbol) && event.symbol !== this.playerSymbol;
-
-      this.onPresence?.({
-        type: "event",
-        event,
-        isOpponent,
-      });
-
-      emitPresenceSnapshot();
-    };
-
-    this._channel.presence.subscribe(this._presenceListener);
 
     await this._channel.presence.enter({
       symbol: this.playerSymbol,
       pseudo: this.myPseudo,
     });
 
-    emitPresenceSnapshot();
+    this._channel.presence.subscribe((presenceMessage) => {
+      const member = normalizePresenceMember(presenceMessage);
+      const isSelf = member.symbol === this.playerSymbol && member.clientId === `${this.roomId}:${this.playerSymbol}:${this.playerToken}`;
+      const eventType = String(presenceMessage?.action ?? "").toLowerCase();
+
+      if (!isSelf) {
+        this.onPresence?.({
+          type: "event",
+          event: eventType,
+          symbol: member.symbol,
+          pseudo: member.pseudo,
+          clientId: member.clientId,
+        });
+      }
+
+      this._emitPresenceSnapshot(eventType || "event");
+    });
+
+    await this._emitPresenceSnapshot("connect");
     this._connected = true;
   }
 
@@ -153,16 +163,8 @@ export class OnlineSession {
   disconnect() {
     if (this._channel) {
       try {
-        this._channel.presence.leave({
-          symbol: this.playerSymbol,
-          pseudo: this.myPseudo,
-        });
+        this._channel.presence.leave();
       } catch {}
-      if (this._presenceListener) {
-        try {
-          this._channel.presence.unsubscribe(this._presenceListener);
-        } catch {}
-      }
       this._channel.unsubscribe();
     }
 
@@ -173,7 +175,6 @@ export class OnlineSession {
     this._connected = false;
     this._channel = null;
     this._client = null;
-    this._presenceListener = null;
   }
 
   get isConnected() {

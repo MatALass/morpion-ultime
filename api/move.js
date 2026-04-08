@@ -7,13 +7,12 @@ function toRoomId(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-function now() {
-  return Date.now();
+function lastActivityAt(meta) {
+  return Number(meta?.updatedAt ?? meta?.createdAt ?? 0);
 }
 
 function isExpired(meta) {
-  const lastActivityAt = meta?.updatedAt ?? meta?.createdAt ?? 0;
-  return !lastActivityAt || now() - lastActivityAt > ROOM_TTL_MS;
+  return !lastActivityAt(meta) || Date.now() - lastActivityAt(meta) > ROOM_TTL_MS;
 }
 
 async function readRoomMeta(ably, roomId) {
@@ -35,21 +34,13 @@ async function writeRoomMeta(ably, roomId, meta) {
   await metaChannel.publish("state", meta);
 }
 
-function validatePlayer(meta, playerSymbol, playerToken) {
-  if (!["X", "O"].includes(playerSymbol)) return false;
-  const expectedToken = playerSymbol === "X" ? meta?.hostToken : meta?.guestToken;
-  return Boolean(expectedToken) && expectedToken === playerToken;
-}
-
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const rawRoomId = req.body?.roomId;
   const roomId = toRoomId(rawRoomId);
-  const playerToken = req.body?.playerToken;
-  const playerSymbol = String(req.body?.playerSymbol ?? "").trim().toUpperCase();
-  const move = req.body?.move;
+  const { playerToken, playerSymbol, move } = req.body ?? {};
 
   if (!roomId || !playerToken || !playerSymbol || !move) {
     return res.status(400).json({ error: "Missing fields" });
@@ -77,7 +68,9 @@ module.exports = async function handler(req, res) {
   if (isExpired(meta)) {
     return res.status(410).json({ error: "Room expired" });
   }
-  if (!validatePlayer(meta, playerSymbol, playerToken)) {
+
+  const expectedToken = playerSymbol === "X" ? meta.hostToken : meta.guestToken;
+  if (!expectedToken || expectedToken !== playerToken) {
     return res.status(403).json({ error: "Invalid token" });
   }
 
@@ -85,13 +78,12 @@ module.exports = async function handler(req, res) {
   await roomChannel.publish("move", {
     symbol: playerSymbol,
     move: { sb: move.sb, c: move.c },
-    ts: now(),
+    ts: Date.now(),
   });
 
   await writeRoomMeta(ably, roomId, {
     ...meta,
-    roomId,
-    updatedAt: now(),
+    updatedAt: Date.now(),
   });
 
   return res.status(200).json({ ok: true });
