@@ -1,8 +1,11 @@
 // storage.js
 const KEY = "ultimate-ttt-save-v1";
+const ONLINE_KEY = "ultimate-ttt-online-v1";
 
 export function saveToLocal(payload) {
-  try { localStorage.setItem(KEY, JSON.stringify(payload)); } catch {}
+  try {
+    localStorage.setItem(KEY, JSON.stringify(payload));
+  } catch {}
 }
 
 export function loadFromLocal() {
@@ -15,7 +18,9 @@ export function loadFromLocal() {
 }
 
 export function clearLocal() {
-  try { localStorage.removeItem(KEY); } catch {}
+  try {
+    localStorage.removeItem(KEY);
+  } catch {}
 }
 
 export function encodeShare(payload) {
@@ -24,4 +29,25 @@ export function encodeShare(payload) {
 
 export function decodeShare(code) {
   return JSON.parse(decodeURIComponent(atob(code.trim())));
+}
+
+export function saveOnlineSession(payload) {
+  try {
+    localStorage.setItem(ONLINE_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
+export function loadOnlineSession() {
+  try {
+    const raw = localStorage.getItem(ONLINE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearOnlineSession() {
+  try {
+    localStorage.removeItem(ONLINE_KEY);
+  } catch {}
 }
