@@ -133,8 +133,8 @@ export class OnlineSession {
       this._emitPresenceSnapshot(eventType || "event");
     });
 
-    await this._emitPresenceSnapshot("connect");
     this._connected = true;
+    this._emitPresenceSnapshot("connect");
   }
 
   async sendMove(move) {

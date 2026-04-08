@@ -657,13 +657,15 @@ async function onCreateRoom() {
     const data = await createRoom();
     onlineSymbol = data.playerSymbol; // "X"
 
+    elRoomId.textContent = data.roomId;
+    updateOnlineControls(true);
+    resetGame(true);
+    setRoomStatus("Connexion temps réel…", "info");
+
     onlineSession = new OnlineSession({ ...data, myPseudo });
     attachSessionHandlers(onlineSession);
     await onlineSession.connect();
 
-    elRoomId.textContent = data.roomId;
-    updateOnlineControls(true);
-    resetGame(true);
     setRoomStatus("En attente de l'adversaire…", "waiting");
     persistOnlineSession();
   } catch (err) {
