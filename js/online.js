@@ -81,6 +81,7 @@ export class OnlineSession {
           count: members?.length ?? 0,
           opponentPresent: Boolean(opponent),
           opponentPseudo: opponent?.data?.pseudo ?? "",
+          opponentSymbol,
         });
       });
     };
