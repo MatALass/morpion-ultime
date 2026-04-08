@@ -12,6 +12,11 @@ function toRoomId(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
+function toPseudo(value) {
+  const pseudo = String(value ?? "").trim();
+  return pseudo || "Joueur";
+}
+
 function lastActivityAt(meta) {
   return Number(meta?.updatedAt ?? meta?.createdAt ?? 0);
 }
@@ -49,11 +54,29 @@ async function buildTokenRequest(ably, roomId, playerSymbol, playerToken) {
   });
 }
 
+function buildRoomIdentity(meta, playerSymbol) {
+  const hostPseudo = toPseudo(meta?.hostPseudo);
+  const guestPseudo = meta?.guestPseudo ? toPseudo(meta.guestPseudo) : "";
+  const opponentPseudo = playerSymbol === "X" ? guestPseudo : hostPseudo;
+
+  return {
+    hostPseudo,
+    guestPseudo,
+    opponentPseudo,
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { action, roomId: requestedRoom, playerToken, playerSymbol } = req.body ?? {};
+  const {
+    action,
+    roomId: requestedRoom,
+    playerToken,
+    playerSymbol,
+    pseudo: requestedPseudo,
+  } = req.body ?? {};
 
   if (!process.env.ABLY_API_KEY) {
     return res.status(500).json({ error: "ABLY_API_KEY not configured" });
@@ -65,6 +88,7 @@ module.exports = async function handler(req, res) {
     const roomId = genId(6);
     const hostToken = genId(16);
     const now = Date.now();
+    const hostPseudo = toPseudo(requestedPseudo);
 
     const meta = {
       roomId,
@@ -72,6 +96,8 @@ module.exports = async function handler(req, res) {
       updatedAt: now,
       hostToken,
       guestToken: null,
+      hostPseudo,
+      guestPseudo: "",
     };
 
     await writeRoomMeta(ably, roomId, meta);
@@ -80,6 +106,9 @@ module.exports = async function handler(req, res) {
       roomId,
       playerToken: hostToken,
       playerSymbol: "X",
+      hostPseudo,
+      guestPseudo: "",
+      opponentPseudo: "",
       ablyTokenRequest: await buildTokenRequest(ably, roomId, "X", hostToken),
     });
   }
@@ -94,9 +123,12 @@ module.exports = async function handler(req, res) {
     if (meta.guestToken) return res.status(409).json({ error: "Room already full" });
 
     const guestToken = genId(16);
+    const guestPseudo = toPseudo(requestedPseudo);
     const nextMeta = {
       ...meta,
+      hostPseudo: toPseudo(meta.hostPseudo),
       guestToken,
+      guestPseudo,
       updatedAt: Date.now(),
     };
 
@@ -106,6 +138,7 @@ module.exports = async function handler(req, res) {
       roomId,
       playerToken: guestToken,
       playerSymbol: "O",
+      ...buildRoomIdentity(nextMeta, "O"),
       ablyTokenRequest: await buildTokenRequest(ably, roomId, "O", guestToken),
     });
   }
@@ -128,15 +161,20 @@ module.exports = async function handler(req, res) {
       return res.status(403).json({ error: "Invalid token" });
     }
 
-    await writeRoomMeta(ably, roomId, {
+    const nextMeta = {
       ...meta,
+      hostPseudo: toPseudo(meta.hostPseudo),
+      guestPseudo: meta.guestPseudo ? toPseudo(meta.guestPseudo) : "",
       updatedAt: Date.now(),
-    });
+    };
+
+    await writeRoomMeta(ably, roomId, nextMeta);
 
     return res.status(200).json({
       roomId,
       playerToken,
       playerSymbol,
+      ...buildRoomIdentity(nextMeta, playerSymbol),
       ablyTokenRequest: await buildTokenRequest(ably, roomId, playerSymbol, playerToken),
     });
   }

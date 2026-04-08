@@ -194,12 +194,19 @@ async function postRoomAction(body) {
   return data;
 }
 
-export async function createRoom() {
-  return postRoomAction({ action: "create" });
+export async function createRoom(pseudo) {
+  return postRoomAction({
+    action: "create",
+    pseudo,
+  });
 }
 
-export async function joinRoom(roomId) {
-  return postRoomAction({ action: "join", roomId });
+export async function joinRoom(roomId, pseudo) {
+  return postRoomAction({
+    action: "join",
+    roomId,
+    pseudo,
+  });
 }
 
 export async function reconnectRoom(roomId, playerToken, playerSymbol) {
