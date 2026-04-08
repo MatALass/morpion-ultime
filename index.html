@@ -3,64 +3,67 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Ultimate Tic-Tac-Toe avec IA (Minimax + MCTS), duel en ligne, replay et analyse de coups." />
-    <meta property="og:title" content="Ultimate Tic-Tac-Toe" />
+    <meta name="description" content="Morpion Ultime — jeu de stratégie cartoon avec IA, duel en ligne et replay." />
+    <meta property="og:title" content="🎮 Morpion Ultime" />
     <meta property="og:description" content="Morpion Ultime avec IA, duel en ligne et outils d'analyse." />
     <meta property="og:type" content="website" />
-    <title>Ultimate Tic-Tac-Toe</title>
+    <title>🎮 Morpion Ultime</title>
     <link rel="stylesheet" href="./css/style.css" />
   </head>
 
   <body>
     <header class="top">
-      <h1>Ultimate Tic-Tac-Toe</h1>
+      <h1>Morpion Ultime</h1>
 
       <section class="controls">
+
+        <!-- STATUS -->
         <div class="status" id="status">Chargement…</div>
 
+        <!-- LIGNE 1 : Réglages principaux -->
         <div class="row">
           <label>
-            Mode :
+            🎮 Mode :
             <select id="mode">
-              <option value="hva" selected>Humain vs IA</option>
-              <option value="hvh">Humain vs Humain</option>
-              <option value="ava">IA vs IA</option>
-              <option value="online">Duel en ligne</option>
+              <option value="hva" selected>👤 vs 🤖 IA</option>
+              <option value="hvh">👤 vs 👤 Duel local</option>
+              <option value="ava">🤖 vs 🤖 Spectateur</option>
+              <option value="online">🌐 Duel en ligne</option>
             </select>
           </label>
 
           <label>
-            Tu joues :
+            Je joue :
             <select id="humanSymbol">
-              <option value="X" selected>X</option>
-              <option value="O">O</option>
+              <option value="X" selected>❌ X</option>
+              <option value="O">⭕ O</option>
             </select>
           </label>
 
           <label>
-            IA :
+            🤖 IA :
             <select id="aiType">
               <option value="minimax" selected>Minimax</option>
-              <option value="mcts">MCTS (UCT)</option>
+              <option value="mcts">MCTS</option>
             </select>
           </label>
 
           <label>
-            Difficulté :
+            💪 Difficulté :
             <select id="difficulty">
-              <option value="easy">Facile</option>
-              <option value="medium" selected>Moyen</option>
-              <option value="hard">Difficile</option>
+              <option value="easy">😊 Facile</option>
+              <option value="medium" selected>😐 Moyen</option>
+              <option value="hard">😤 Difficile</option>
             </select>
           </label>
         </div>
 
+        <!-- LIGNE 2 : Actions -->
         <div class="row">
-          <label class="range">
-            Temps IA (ms) :
-            <input id="aiTimeLimit" type="range" min="50" max="1500" step="50" value="250" />
-            <span id="aiTimeLimitLabel">250</span>
-          </label>
+          <button id="restart" title="Nouvelle partie (N)">🔄 Recommencer</button>
+          <button id="undo" title="Annuler (U)">↩️ Annuler</button>
+          <button id="redo" title="Refaire (R)">↪️ Refaire</button>
+          <button id="playPause" title="Pause/Play (Espace)">⏸ Pause</button>
 
           <label>
             Vitesse :
@@ -72,105 +75,119 @@
             </select>
           </label>
 
-          <button id="playPause" title="Pause/Play (Espace)">Pause</button>
-          <button id="undo" title="Undo (U)">Undo</button>
-          <button id="redo" title="Redo (R)">Redo</button>
-          <button id="restart" title="Nouvelle partie (N)">Recommencer</button>
-          <button id="resetAll" title="Reset total">Reset total</button>
+          <button id="resetAll" title="Réinitialiser tout">🗑️ Reset total</button>
         </div>
 
+        <!-- LIGNE 3 : Infos en temps réel -->
         <div class="row small">
-          <div class="chip" id="activeHint">Plateau actif : —</div>
-          <div class="chip" id="playerHint">Joueur : —</div>
-          <div class="chip" id="aiHint">IA : —</div>
-          <div class="chip" id="seriesHint">Série: X 0 • O 0 • = 0</div>
+          <div class="chip" id="activeHint">📍 Plateau actif : —</div>
+          <div class="chip" id="playerHint">🎲 Joueur : —</div>
+          <div class="chip" id="aiHint">🤖 IA : —</div>
+          <div class="chip" id="seriesHint">📊 X 0 • O 0 • = 0</div>
         </div>
 
-        <div class="row small">
+        <!-- LIGNE 4 : Options avancées -->
+        <div class="row small" style="margin-top:10px;">
           <label class="toggle">
             <input type="checkbox" id="analysis" />
-            Analyse (top coups + heatmap)
+            🔍 Voir les meilleurs coups
           </label>
 
-          <button id="replayStart" title="Replay début">⏮</button>
-          <button id="replayPrev" title="Coup précédent">⏪</button>
-          <button id="replayNext" title="Coup suivant">⏩</button>
-          <button id="replayEnd" title="Replay fin">⏭</button>
-          <button id="replayPlay" title="Lecture replay">▶</button>
-
-          <button id="simulate100" title="Simuler 100 parties IA vs IA">Simuler 100</button>
-          <button id="simulate1000" title="Simuler 1000 parties IA vs IA">Simuler 1000</button>
+          <label class="range">
+            ⏱ Temps IA :
+            <input id="aiTimeLimit" type="range" min="50" max="1500" step="50" value="250" />
+            <span id="aiTimeLimitLabel">250</span> ms
+          </label>
         </div>
 
+        <!-- LIGNE 5 : Replay -->
+        <div class="row small" style="margin-top:8px;">
+          <span style="font-weight:800;font-size:12px;color:var(--muted);">📼 Replay :</span>
+          <button id="replayStart" title="Début">⏮</button>
+          <button id="replayPrev" title="Coup précédent">⏪</button>
+          <button id="replayNext" title="Coup suivant">⏩</button>
+          <button id="replayEnd" title="Fin">⏭</button>
+          <button id="replayPlay" title="Lecture">▶</button>
+
+          <button id="simulate100" title="Simuler 100 parties IA vs IA">🔬 ×100</button>
+          <button id="simulate1000" title="Simuler 1000 parties IA vs IA">🔬 ×1000</button>
+        </div>
+
+        <!-- PARTAGE -->
         <details class="share">
-          <summary>Partager / Importer une partie</summary>
+          <summary>📤 Partager / Importer une partie</summary>
           <div class="share-grid">
-            <textarea id="shareCode" rows="4" placeholder="Code de partie…"></textarea>
+            <textarea id="shareCode" rows="3" placeholder="Code de partie…"></textarea>
             <div class="share-actions">
-              <button id="exportBtn">Exporter</button>
-              <button id="importBtn">Importer</button>
-              <button id="clearSaveBtn">Effacer sauvegarde</button>
+              <button id="exportBtn">📤 Exporter</button>
+              <button id="importBtn">📥 Importer</button>
+              <button id="clearSaveBtn">🗑 Effacer</button>
             </div>
           </div>
           <p class="hint">
-            Raccourcis : <b>U</b> Undo • <b>R</b> Redo • <b>N</b> Nouvelle partie • <b>Espace</b> Pause/Play.
+            ⌨️ Raccourcis : <b>U</b> Annuler • <b>R</b> Refaire • <b>N</b> Nouvelle partie • <b>Espace</b> Pause/Play
           </p>
         </details>
 
+        <!-- PANEL EN LIGNE -->
         <div id="onlinePanel" class="online-panel hidden">
           <div class="online-panel__header">
-            <span class="online-panel__title">Duel en ligne</span>
-            <button id="leaveRoomBtn" class="hidden btn-danger">Quitter la room</button>
+            <span class="online-panel__title">🌐 Duel en ligne</span>
+            <button id="leaveRoomBtn" class="hidden btn-danger">🚪 Quitter</button>
           </div>
 
           <div id="reconnectBanner" class="reconnect-banner hidden">
             <span id="reconnectText">Partie en cours détectée…</span>
-            <button id="reconnectBtn" class="btn-primary">Reprendre</button>
+            <button id="reconnectBtn" class="btn-primary">▶ Reprendre</button>
             <button id="reconnectDismiss" class="btn-ghost">Ignorer</button>
           </div>
 
           <div class="online-panel__body">
             <div class="online-pseudo-row">
-              <label for="pseudoInput">Pseudo :</label>
+              <label for="pseudoInput">👤 Pseudo :</label>
               <input id="pseudoInput" type="text" placeholder="Ton pseudo" maxlength="16" spellcheck="false" autocomplete="off" />
             </div>
 
             <div class="online-create-join">
-              <button id="createRoomBtn" class="btn-primary">Créer une room</button>
+              <button id="createRoomBtn" class="btn-primary">🏠 Créer une room</button>
               <span class="online-sep">ou</span>
-              <input id="roomCodeInput" type="text" placeholder="Code room (ex: A3F7B2)" maxlength="6" spellcheck="false" autocomplete="off" />
-              <button id="joinRoomBtn" class="btn-primary">Rejoindre</button>
+              <input id="roomCodeInput" type="text" placeholder="Code (ex: A3F7)" maxlength="6" spellcheck="false" autocomplete="off" />
+              <button id="joinRoomBtn" class="btn-primary">🔗 Rejoindre</button>
             </div>
 
             <div id="onlineRoomIdRow" class="online-room-id hidden">
-              <span>Code à partager :</span>
+              <span>🔑 Code à partager :</span>
               <strong id="roomIdDisplay" class="room-code">—</strong>
-              <button id="copyRoomBtn" title="Copier le code">Copier le code</button>
+              <button id="copyRoomBtn">📋 Copier</button>
             </div>
 
             <div id="roomStatus" class="room-status"></div>
           </div>
 
           <p class="hint">
-            Crée une room et envoie le code à ton adversaire. Undo/Redo désactivés en mode en ligne.
+            Crée une room et envoie le code à ton adversaire !
           </p>
         </div>
+
       </section>
     </header>
 
     <main class="layout">
       <div class="left">
-        <div id="board" class="big-board" aria-label="Plateau"></div>
+        <!-- PLATEAU DE JEU -->
+        <div id="board" class="big-board" aria-label="Plateau de jeu"></div>
 
-        <section class="panel" style="margin-top:14px;">
-          <h2>Analyse (Top 3)</h2>
+        <!-- ANALYSE -->
+        <section class="panel" id="analysisPanel" style="margin-top:0;">
+          <h2>🔍 Meilleurs coups (Top 3)</h2>
           <ol id="topMoves" class="log"></ol>
         </section>
       </div>
 
+      <!-- SIDEBAR -->
       <aside class="right">
         <section class="panel">
-          <h2>Stats IA</h2>
+          <h2>🤖 Stats IA</h2>
           <div class="kv">
             <div class="k">Dernier coup</div><div class="v" id="aiMove">—</div>
             <div class="k">Temps</div><div class="v" id="aiTime">—</div>
@@ -178,25 +195,52 @@
             <div class="k">Nœuds</div><div class="v" id="aiNodes">—</div>
             <div class="k">Cache</div><div class="v" id="aiCache">—</div>
           </div>
-          <div class="note">(Stats mises à jour quand l’IA joue.)</div>
+          <div class="note">Stats mises à jour quand l'IA joue.</div>
         </section>
 
         <section class="panel">
-          <h2>Historique</h2>
+          <h2>📜 Historique des coups</h2>
           <ol id="log" class="log"></ol>
         </section>
       </aside>
 
+      <!-- OVERLAY FIN DE PARTIE -->
       <div id="overlay" class="overlay hidden">
         <div class="overlay-card">
+          <span class="overlay-emoji" id="overlayEmoji">🎉</span>
           <div id="overlayText" class="overlay-text"></div>
-          <button id="overlayRestart">Rejouer</button>
+          <button id="overlayRestart">🔄 Rejouer !</button>
         </div>
       </div>
 
+      <!-- TOAST -->
       <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     </main>
 
     <script type="module" src="./js/main.js"></script>
+    <script type="module">
+      // Colorisation X/O dans les cellules au survol du DOM
+      const observer = new MutationObserver(() => {
+        document.querySelectorAll('.cell').forEach(cell => {
+          const txt = cell.textContent.trim();
+          cell.classList.toggle('cell-x', txt === 'X');
+          cell.classList.toggle('cell-o', txt === 'O');
+        });
+      });
+      observer.observe(document.getElementById('board'), { childList: true, subtree: true, characterData: true });
+    </script>
+    <script>
+      // Overlay emoji dynamique
+      const overlayTextEl = document.getElementById('overlayText');
+      const overlayEmojiEl = document.getElementById('overlayEmoji');
+      const overlayObserver = new MutationObserver(() => {
+        const txt = overlayTextEl.textContent || '';
+        if (txt.includes('nul')) overlayEmojiEl.textContent = '🤝';
+        else if (txt.includes('X')) overlayEmojiEl.textContent = '❌';
+        else if (txt.includes('O')) overlayEmojiEl.textContent = '⭕';
+        else overlayEmojiEl.textContent = '🎉';
+      });
+      overlayObserver.observe(overlayTextEl, { childList: true, subtree: true, characterData: true });
+    </script>
   </body>
 </html>

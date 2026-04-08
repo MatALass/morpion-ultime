@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Format check (Prettier)
+        run: npm run format:check
+
+      - name: Lint (ESLint + Stylelint + HTML Validate)
+        run: npm run lint
+
+      - name: Unit tests (Vitest)
+        run: npm test
+
+      - name: Check api/ functions exist
+        run: |
+          test -f api/room.js || (echo "api/room.js missing" && exit 1)
+          test -f api/move.js || (echo "api/move.js missing" && exit 1)
+          echo "API functions OK"

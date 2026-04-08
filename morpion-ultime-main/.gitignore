@@ -1,0 +1,38 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build / coverage
+dist/
+coverage/
+.vitest/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Python (si tu utilises python http.server)
+__pycache__/
+*.pyc
+
+# Misc
+*.tmp
+*.bak
+*.cache

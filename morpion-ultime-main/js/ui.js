@@ -74,8 +74,6 @@ export function render(state, prevState, container, suggestions = null) {
       const changed = prevState && prev !== v;
 
       cell.textContent = symbolToChar(v);
-      cell.classList.toggle("cell-x", v === X);
-      cell.classList.toggle("cell-o", v === O);
       cell.classList.toggle("pop", changed && v !== EMPTY);
       if (changed && v !== EMPTY) requestAnimationFrame(() => setTimeout(() => cell.classList.remove("pop"), 180));
 
