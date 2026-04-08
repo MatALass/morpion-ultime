@@ -1,7 +1,6 @@
 {
   "name": "ultimate-ttt",
   "private": true,
-  "type": "module",
   "dependencies": {
     "ably": "^2.5.0"
   },
@@ -18,15 +17,12 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-
     "lint:js": "eslint .",
     "lint:css": "stylelint \"css/**/*.css\"",
     "lint:html": "html-validate \"index.html\"",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:html",
-
     "check": "npm run format:check && npm run lint && npm run test"
   }
 }
