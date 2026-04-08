@@ -1,19 +1,11 @@
 // online.js
 // Manages the Ably real-time connection for online duel mode.
-//
-// Usage:
-//   import { OnlineSession } from "./online.js";
-//   const session = new OnlineSession({ roomId, playerToken, playerSymbol, ablyTokenRequest });
-//   await session.connect();
-//   session.onMove = ({ symbol, move }) => { ... };  // called when opponent plays
-//   session.onPresence = ({ count }) => { ... };     // called when opponent joins/leaves
-//   await session.sendMove({ sb, c });
-//   session.disconnect();
 
 const ABLY_CDN = "https://cdn.ably.com/lib/ably.min-2.js";
 
 async function loadAbly() {
   if (window.Ably) return window.Ably;
+
   await new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = ABLY_CDN;
@@ -21,6 +13,7 @@ async function loadAbly() {
     s.onerror = () => reject(new Error("Failed to load Ably SDK"));
     document.head.appendChild(s);
   });
+
   return window.Ably;
 }
 
@@ -30,24 +23,22 @@ export class OnlineSession {
    * @param {string} opts.roomId
    * @param {string} opts.playerToken
    * @param {"X"|"O"} opts.playerSymbol
-   * @param {object} opts.ablyTokenRequest  — signed token request from /api/room
+   * @param {object} opts.ablyTokenRequest
+   * @param {string} [opts.myPseudo]
    */
-  constructor({ roomId, playerToken, playerSymbol, ablyTokenRequest }) {
+  constructor({ roomId, playerToken, playerSymbol, ablyTokenRequest, myPseudo = "Joueur" }) {
     this.roomId = roomId;
     this.playerToken = playerToken;
     this.playerSymbol = playerSymbol;
     this.ablyTokenRequest = ablyTokenRequest;
+    this.myPseudo = myPseudo;
 
     this._client = null;
     this._channel = null;
     this._connected = false;
 
-    // Callbacks — assign these after construction
-    /** @type {((payload: {symbol: string, move: {sb:number, c:number}}) => void) | null} */
     this.onMove = null;
-    /** @type {((payload: {count: number, opponentPresent: boolean}) => void) | null} */
     this.onPresence = null;
-    /** @type {((err: Error) => void) | null} */
     this.onError = null;
   }
 
@@ -68,35 +59,38 @@ export class OnlineSession {
 
     this._channel = this._client.channels.get(`room:${this.roomId}`);
 
-    // Subscribe to moves from the opponent
     this._channel.subscribe("move", (msg) => {
       const { symbol, move } = msg.data;
-      // Ignore our own echoed moves
       if (symbol === this.playerSymbol) return;
       this.onMove?.({ symbol, move });
     });
 
-    // Presence — track when opponent joins/leaves
-    await this._channel.presence.enter({ symbol: this.playerSymbol });
+    await this._channel.presence.enter({
+      symbol: this.playerSymbol,
+      pseudo: this.myPseudo,
+    });
 
-    this._channel.presence.subscribe(() => {
+    const notifyPresence = () => {
       this._channel.presence.get((err, members) => {
         if (err) return;
-        const count = members?.length ?? 0;
+
         const opponentSymbol = this.playerSymbol === "X" ? "O" : "X";
-        const opponentPresent = members?.some((m) => m.data?.symbol === opponentSymbol) ?? false;
-        this.onPresence?.({ count, opponentPresent });
+        const opponent = members?.find((member) => member.data?.symbol === opponentSymbol) ?? null;
+
+        this.onPresence?.({
+          count: members?.length ?? 0,
+          opponentPresent: Boolean(opponent),
+          opponentPseudo: opponent?.data?.pseudo ?? "",
+        });
       });
-    });
+    };
+
+    this._channel.presence.subscribe(notifyPresence);
+    notifyPresence();
 
     this._connected = true;
   }
 
-  /**
-   * Send our move to the server for validation + relay.
-   * Falls back to direct Ably publish if the API call fails (dev convenience).
-   * @param {{sb: number, c: number}} move
-   */
   async sendMove(move) {
     if (!this._connected) throw new Error("Not connected");
 
@@ -122,12 +116,16 @@ export class OnlineSession {
 
   disconnect() {
     if (this._channel) {
-      try { this._channel.presence.leave(); } catch {}
+      try {
+        this._channel.presence.leave();
+      } catch {}
       this._channel.unsubscribe();
     }
+
     if (this._client) {
       this._client.close();
     }
+
     this._connected = false;
     this._channel = null;
     this._client = null;
@@ -138,33 +136,31 @@ export class OnlineSession {
   }
 }
 
-/**
- * Create a new room via /api/room.
- * @returns {Promise<{roomId, playerToken, playerSymbol, ablyTokenRequest}>}
- */
-export async function createRoom() {
+async function postRoomAction(body) {
   const res = await fetch("/api/room", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "create" }),
+    body: JSON.stringify(body),
   });
+
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
 }
 
-/**
- * Join an existing room via /api/room.
- * @param {string} roomId
- * @returns {Promise<{roomId, playerToken, playerSymbol, ablyTokenRequest}>}
- */
+export async function createRoom() {
+  return postRoomAction({ action: "create" });
+}
+
 export async function joinRoom(roomId) {
-  const res = await fetch("/api/room", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "join", roomId }),
+  return postRoomAction({ action: "join", roomId });
+}
+
+export async function reconnectRoom(roomId, playerToken, playerSymbol) {
+  return postRoomAction({
+    action: "reconnect",
+    roomId,
+    playerToken,
+    playerSymbol,
   });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data;
 }

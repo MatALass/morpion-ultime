@@ -4,7 +4,7 @@ import { chooseAiMoveWithStats, getTopMoves } from "./ai.js";
 import { buildBoardDOM, render } from "./ui.js";
 import { saveToLocal, loadFromLocal, clearLocal, encodeShare, decodeShare, saveOnlineSession, loadOnlineSession, clearOnlineSession } from "./storage.js";
 import { buildReplay } from "./replay.js";
-import { OnlineSession, createRoom, joinRoom } from "./online.js";
+import { OnlineSession, createRoom, joinRoom, reconnectRoom } from "./online.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -425,7 +425,6 @@ function persistOnlineSession() {
     roomId: onlineSession.roomId,
     playerToken: onlineSession.playerToken,
     playerSymbol: onlineSymbol,
-    ablyTokenRequest: onlineSession.ablyTokenRequest,
     myPseudo,
     opponentPseudo,
     moveList: moveList.map(m => ({ ...m })),
@@ -558,10 +557,7 @@ async function onCreateRoom() {
 
 async function onJoinRoom() {
   const roomId = elRoomCodeInput.value.trim().toUpperCase();
-  if (!roomId) {
-    showToast("Saisis le code de la room.");
-    return;
-  }
+  if (!roomId) { showToast("Saisis le code de la room."); return; }
 
   elJoinRoom.disabled = true;
   setRoomStatus("Connexion…", "info");
@@ -606,50 +602,54 @@ async function tryReconnect(saved) {
   setRoomStatus("Reconnexion en cours…", "info");
 
   try {
-    // Restore pseudos
     myPseudo = saved.myPseudo || "Joueur";
     opponentPseudo = saved.opponentPseudo || "";
     onlineSymbol = saved.playerSymbol;
-
-    // Pre-fill pseudo input
     elPseudoInput.value = myPseudo;
 
+    const fresh = await reconnectRoom(saved.roomId, saved.playerToken, saved.playerSymbol);
+
     onlineSession = new OnlineSession({
-      roomId: saved.roomId,
+      roomId: fresh.roomId,
       playerToken: saved.playerToken,
       playerSymbol: saved.playerSymbol,
-      ablyTokenRequest: saved.ablyTokenRequest,
+      ablyTokenRequest: fresh.ablyTokenRequest,
       myPseudo,
     });
     attachSessionHandlers(onlineSession);
     await onlineSession.connect();
 
-    // Rebuild game state from saved move list
-    moveList = saved.moveList ?? [];
-    if (moveList.length) {
-      const replayStatesLocal = buildReplay(moveList);
-      state = cloneState(replayStatesLocal[replayStatesLocal.length - 1]);
-      // Rebuild log entries
-      log = moveList.map(m => {
-        const pVal = m.player === "X" ? X : O;
-        return recordMoveText({ sb: m.sb, c: m.c }, pVal);
-      });
-      updateLogUI();
+    state = createInitialState();
+    prevState = null;
+    moveList = Array.isArray(saved.moveList) ? saved.moveList.map((move) => ({ ...move })) : [];
+    log = [];
+
+    for (const move of moveList) {
+      const playerVal = move.player === "X" ? X : O;
+      const res = applyMove(state, { sb: move.sb, c: move.c }, playerVal);
+      if (!res.ok) {
+        throw new Error("Saved move list is invalid");
+      }
+      log.push(recordMoveText({ sb: move.sb, c: move.c }, playerVal));
     }
 
-    elRoomId.textContent = saved.roomId;
+    updateLogUI();
+    elRoomId.textContent = fresh.roomId;
     updateOnlineControls(true);
     buildBoardDOM(elBoard, onClick);
     rerender();
+    persistOnlineSession();
 
-    const oppLabel = opponentPseudo || "L'adversaire";
-    setRoomStatus(`Reconnecté ! En attente de ${oppLabel}…`, "waiting");
+    const oppLabel = opponentPseudo || "l'adversaire";
+    setRoomStatus(`Reconnecté. En attente de ${oppLabel}…`, "waiting");
     showToast("Partie restaurée ✓");
   } catch (err) {
     setRoomStatus(`Reconnexion échouée : ${err.message}`, "error");
     clearOnlineSession();
+    onlineSession?.disconnect();
     onlineSession = null;
     onlineSymbol = null;
+    opponentPseudo = "";
     updateOnlineControls(false);
   }
 }

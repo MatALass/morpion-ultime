@@ -2,15 +2,59 @@
 const Ably = require("ably");
 const { randomBytes } = require("crypto");
 
+const ROOM_TTL_MS = 10 * 60 * 1000;
+
 function genId(n = 6) {
   return randomBytes(n).toString("hex").toUpperCase().slice(0, n);
+}
+
+function toRoomId(value) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function isExpired(meta) {
+  return !meta?.createdAt || Date.now() - meta.createdAt > ROOM_TTL_MS;
+}
+
+async function readRoomMeta(ably, roomId) {
+  const metaChannel = ably.channels.get(`room-meta:${roomId}`);
+  let history;
+
+  try {
+    history = await metaChannel.history({ limit: 50 });
+  } catch {
+    return null;
+  }
+
+  const stateItem = history.items.find((item) => item.name === "state" && item.data?.roomId === roomId);
+  return stateItem?.data ?? null;
+}
+
+async function writeRoomMeta(ably, roomId, meta) {
+  const metaChannel = ably.channels.get(`room-meta:${roomId}`);
+  await metaChannel.publish("state", meta);
+}
+
+async function buildTokenRequest(ably, roomId, playerSymbol, playerToken) {
+  return ably.auth.createTokenRequest({
+    clientId: `${roomId}:${playerSymbol}:${playerToken}`,
+    capability: {
+      [`room:${roomId}`]: ["publish", "subscribe", "presence"],
+      [`room-meta:${roomId}`]: ["subscribe"],
+    },
+  });
 }
 
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { action, roomId: requestedRoom } = req.body ?? {};
+  const {
+    action,
+    roomId: requestedRoom,
+    playerToken,
+    playerSymbol,
+  } = req.body ?? {};
 
   if (!process.env.ABLY_API_KEY) {
     return res.status(500).json({ error: "ABLY_API_KEY not configured" });
@@ -20,67 +64,75 @@ module.exports = async function handler(req, res) {
 
   if (action === "create") {
     const roomId = genId(6);
-    const playerToken = genId(16);
+    const hostToken = genId(16);
 
-    const channel = ably.channels.get(`room-meta:${roomId}`);
-    await channel.publish("created", {
+    const meta = {
       roomId,
-      hostToken: playerToken,
       createdAt: Date.now(),
-    });
+      updatedAt: Date.now(),
+      hostToken,
+      guestToken: null,
+    };
 
-    const tokenRequest = await ably.auth.createTokenRequest({
-      clientId: `${roomId}:X:${playerToken}`,
-      capability: {
-        [`room:${roomId}`]: ["publish", "subscribe", "presence"],
-        [`room-meta:${roomId}`]: ["subscribe"],
-      },
-    });
+    await writeRoomMeta(ably, roomId, meta);
 
     return res.status(200).json({
       roomId,
-      playerToken,
+      playerToken: hostToken,
       playerSymbol: "X",
-      ablyTokenRequest: tokenRequest,
+      ablyTokenRequest: await buildTokenRequest(ably, roomId, "X", hostToken),
     });
   }
 
   if (action === "join") {
-    if (!requestedRoom) return res.status(400).json({ error: "roomId required" });
+    const roomId = toRoomId(requestedRoom);
+    if (!roomId) return res.status(400).json({ error: "roomId required" });
 
-    const roomId = requestedRoom.toUpperCase().trim();
-    const playerToken = genId(16);
+    const meta = await readRoomMeta(ably, roomId);
+    if (!meta) return res.status(404).json({ error: "Room not found" });
+    if (isExpired(meta)) return res.status(410).json({ error: "Room expired" });
+    if (meta.guestToken) return res.status(409).json({ error: "Room already full" });
 
-    const metaChannel = ably.channels.get(`room-meta:${roomId}`);
-    let history;
-    try {
-      history = await metaChannel.history({ limit: 1 });
-    } catch {
-      return res.status(404).json({ error: "Room not found" });
-    }
+    const guestToken = genId(16);
+    const nextMeta = {
+      ...meta,
+      guestToken,
+      updatedAt: Date.now(),
+    };
 
-    if (!history.items.length) {
-      return res.status(404).json({ error: "Room not found" });
-    }
+    await writeRoomMeta(ably, roomId, nextMeta);
 
-    const meta = history.items[0].data;
-    if (Date.now() - meta.createdAt > 10 * 60 * 1000) {
-      return res.status(410).json({ error: "Room expired" });
-    }
-
-    const tokenRequest = await ably.auth.createTokenRequest({
-      clientId: `${roomId}:O:${playerToken}`,
-      capability: {
-        [`room:${roomId}`]: ["publish", "subscribe", "presence"],
-        [`room-meta:${roomId}`]: ["subscribe"],
-      },
+    return res.status(200).json({
+      roomId,
+      playerToken: guestToken,
+      playerSymbol: "O",
+      ablyTokenRequest: await buildTokenRequest(ably, roomId, "O", guestToken),
     });
+  }
+
+  if (action === "reconnect") {
+    const roomId = toRoomId(requestedRoom);
+    if (!roomId || !playerToken || !playerSymbol) {
+      return res.status(400).json({ error: "roomId, playerToken and playerSymbol are required" });
+    }
+    if (!["X", "O"].includes(playerSymbol)) {
+      return res.status(400).json({ error: "Invalid symbol" });
+    }
+
+    const meta = await readRoomMeta(ably, roomId);
+    if (!meta) return res.status(404).json({ error: "Room not found" });
+    if (isExpired(meta)) return res.status(410).json({ error: "Room expired" });
+
+    const expectedToken = playerSymbol === "X" ? meta.hostToken : meta.guestToken;
+    if (!expectedToken || expectedToken !== playerToken) {
+      return res.status(403).json({ error: "Invalid token" });
+    }
 
     return res.status(200).json({
       roomId,
       playerToken,
-      playerSymbol: "O",
-      ablyTokenRequest: tokenRequest,
+      playerSymbol,
+      ablyTokenRequest: await buildTokenRequest(ably, roomId, playerSymbol, playerToken),
     });
   }
 

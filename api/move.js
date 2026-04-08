@@ -1,6 +1,26 @@
 // api/move.js — Vercel Serverless Function (CommonJS)
 const Ably = require("ably");
 
+const ROOM_TTL_MS = 10 * 60 * 1000;
+
+function isExpired(meta) {
+  return !meta?.createdAt || Date.now() - meta.createdAt > ROOM_TTL_MS;
+}
+
+async function readRoomMeta(ably, roomId) {
+  const metaChannel = ably.channels.get(`room-meta:${roomId}`);
+  let history;
+
+  try {
+    history = await metaChannel.history({ limit: 50 });
+  } catch {
+    return null;
+  }
+
+  const stateItem = history.items.find((item) => item.name === "state" && item.data?.roomId === roomId);
+  return stateItem?.data ?? null;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -25,21 +45,17 @@ module.exports = async function handler(req, res) {
   }
 
   const ably = new Ably.Rest(process.env.ABLY_API_KEY);
-  const metaChannel = ably.channels.get(`room-meta:${roomId}`);
+  const meta = await readRoomMeta(ably, roomId);
 
-  let history;
-  try {
-    history = await metaChannel.history({ limit: 1 });
-  } catch {
+  if (!meta) {
     return res.status(404).json({ error: "Room not found" });
   }
-
-  if (!history.items.length) {
-    return res.status(404).json({ error: "Room not found" });
+  if (isExpired(meta)) {
+    return res.status(410).json({ error: "Room expired" });
   }
 
-  const meta = history.items[0].data;
-  if (playerSymbol === "X" && meta.hostToken !== playerToken) {
+  const expectedToken = playerSymbol === "X" ? meta.hostToken : meta.guestToken;
+  if (!expectedToken || expectedToken !== playerToken) {
     return res.status(403).json({ error: "Invalid token" });
   }
 
