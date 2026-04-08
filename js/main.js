@@ -549,6 +549,7 @@ async function onCreateRoom() {
     setRoomStatus("En attente de l'adversaire…", "waiting");
     updateOnlineControls(true);
     resetGame(true);
+    persistOnlineSession();
   } catch (err) {
     setRoomStatus(`Erreur : ${err.message}`, "error");
     elCreateRoom.disabled = false;
@@ -557,7 +558,10 @@ async function onCreateRoom() {
 
 async function onJoinRoom() {
   const roomId = elRoomCodeInput.value.trim().toUpperCase();
-  if (!roomId) { showToast("Saisis le code de la room."); return; }
+  if (!roomId) {
+    showToast("Saisis le code de la room.");
+    return;
+  }
 
   elJoinRoom.disabled = true;
   setRoomStatus("Connexion…", "info");
@@ -575,6 +579,7 @@ async function onJoinRoom() {
     setRoomStatus("Connecté ! X commence.", "ok");
     updateOnlineControls(true);
     resetGame(true);
+    persistOnlineSession();
   } catch (err) {
     setRoomStatus(`Erreur : ${err.message}`, "error");
     elJoinRoom.disabled = false;
@@ -867,6 +872,12 @@ window.addEventListener("keydown", (e) => {
   if (k === "r") redo();
   if (k === "n") resetGame(true);
   if (k === " ") { e.preventDefault(); togglePause(); }
+});
+
+window.addEventListener("beforeunload", () => {
+  if (onlineSession && onlineSymbol) {
+    persistOnlineSession();
+  }
 });
 
 // ─── Events ───────────────────────────────────────────────────────────────
