@@ -102,6 +102,7 @@ let onlineSymbol = null;     // "X" | "O" — our symbol in the current online g
 let myPseudo = "";           // our pseudo for the current online game
 let opponentPseudo = "";     // opponent pseudo, received via Ably presence
 let opponentPresent = false;
+let lastPresenceStatusKey = "";
 
 function isOnlineMode() {
   return elMode.value === "online";
@@ -119,7 +120,7 @@ function getOnlinePseudoForSymbol(sym) {
 }
 
 function formatOnlinePlayerLabel(sym, fallbackPseudo = "") {
-  const pseudo = fallbackPseudo || getOnlinePseudoForSymbol(sym);
+  const pseudo = sanitizePseudo(fallbackPseudo) || getOnlinePseudoForSymbol(sym);
   return pseudo ? `${pseudo} (${sym})` : sym;
 }
 
@@ -135,6 +136,55 @@ function rebuildOnlineLogFromMoves() {
     return recordMoveText(move, playerVal);
   });
   updateLogUI();
+}
+
+function sanitizePseudo(value, fallback = "") {
+  const pseudo = String(value ?? "").trim();
+  return pseudo || fallback;
+}
+
+function getOnlinePlayerLabel(sym) {
+  const pseudo = getOnlinePseudoForSymbol(sym);
+  return pseudo ? `${pseudo} (${sym})` : sym;
+}
+
+function rebuildOnlineStateFromMoves(savedMoves) {
+  state = createInitialState();
+  prevState = null;
+  moveList = Array.isArray(savedMoves) ? savedMoves.map((move) => ({ ...move })) : [];
+  log = [];
+
+  for (const move of moveList) {
+    const playerVal = move.player === "X" ? X : O;
+    const res = applyMove(state, { sb: move.sb, c: move.c }, playerVal);
+    if (!res.ok) {
+      throw new Error("Saved move list is invalid");
+    }
+    log.push(recordMoveText(move, playerVal));
+  }
+
+  updateLogUI();
+}
+
+function updateRoomPresenceStatus(message, type = "info", key = "") {
+  if (key && key === lastPresenceStatusKey) return;
+  if (key) lastPresenceStatusKey = key;
+  setRoomStatus(message, type);
+}
+
+function syncPresenceState({ opponentPseudo: nextPseudo = "", opponentPresent: nextPresent = false }) {
+  const previousPseudo = opponentPseudo;
+  opponentPresent = Boolean(nextPresent);
+  if (nextPseudo) {
+    opponentPseudo = sanitizePseudo(nextPseudo, opponentPseudo);
+  }
+
+  const pseudoChanged = Boolean(opponentPseudo) && opponentPseudo !== previousPseudo;
+  if (pseudoChanged) {
+    rebuildOnlineLogFromMoves();
+  }
+
+  setStatus();
 }
 
 // ─── Toast / Overlay ───────────────────────────────────────────────────────
@@ -489,7 +539,7 @@ async function handleOnlineMove(move, symbol) {
     sb: move.sb,
     c: move.c,
     player: playerSym,
-    pseudo: getOnlinePseudoForSymbol(symbol) || myPseudo || "Joueur",
+    pseudo: sanitizePseudo(getOnlinePseudoForSymbol(symbol), sanitizePseudo(myPseudo, "Joueur")),
   };
   moveList.push(moveEntry);
   log.push(recordMoveText(moveEntry, playerVal));
@@ -525,7 +575,7 @@ function applyOpponentMove(move, symbol) {
     sb: move.sb,
     c: move.c,
     player: playerSym,
-    pseudo: getOnlinePseudoForSymbol(symbol) || opponentPseudo || "",
+    pseudo: sanitizePseudo(getOnlinePseudoForSymbol(symbol), sanitizePseudo(opponentPseudo, "")),
   };
   moveList.push(moveEntry);
   log.push(recordMoveText(moveEntry, playerVal));
@@ -561,40 +611,36 @@ function updateOnlineControls(connected) {
 
 function attachSessionHandlers(session) {
   session.onMove = ({ symbol, move }) => applyOpponentMove(move, symbol);
-  session.onPresence = ({ opponentPresent: nextOpponentPresent, opponentPseudo: oppPseudo }) => {
-    const wasPresent = opponentPresent;
-    const previousPseudo = opponentPseudo;
+  session.onPresence = (payload) => {
+    if (payload?.type === "event") {
+      if (!payload.isOpponent) return;
 
-    opponentPresent = nextOpponentPresent;
-    if (oppPseudo) {
-      opponentPseudo = oppPseudo;
-    }
+      const action = payload.event?.action;
+      const pseudo = sanitizePseudo(payload.event?.pseudo, opponentPseudo || "L'adversaire");
 
-    const pseudoChanged = Boolean(opponentPseudo) && opponentPseudo !== previousPseudo;
-    if (pseudoChanged) {
-      rebuildOnlineLogFromMoves();
-    }
+      if (action === "enter" || action === "present") {
+        updateRoomPresenceStatus(`${pseudo} a rejoint la room.`, "ok", `join:${pseudo}`);
+        showToast(`${pseudo} a rejoint la room.`);
+        return;
+      }
 
-    setStatus();
+      if (action === "leave") {
+        updateRoomPresenceStatus(`${pseudo} a quitté la room.`, "waiting", `leave:${pseudo}`);
+        return;
+      }
 
-    if (opponentPresent && !wasPresent) {
-      const label = opponentPseudo || "L'adversaire";
-      setRoomStatus(`${label} a rejoint la room.`, "ok");
-      showToast(`${label} a rejoint la room.`);
       return;
     }
 
-    if (!opponentPresent && wasPresent) {
-      const label = opponentPseudo || "L'adversaire";
-      setRoomStatus(`${label} a quitté la room.`, "waiting");
-      return;
-    }
+    if (payload?.type === "snapshot") {
+      syncPresenceState(payload);
 
-    if (opponentPresent) {
-      const label = opponentPseudo || "L'adversaire";
-      setRoomStatus(`${label} est connecté.`, "ok");
-    } else {
-      setRoomStatus("En attente de l'adversaire…", "waiting");
+      if (opponentPresent) {
+        const pseudo = sanitizePseudo(opponentPseudo, "L'adversaire");
+        updateRoomPresenceStatus(`${pseudo} a rejoint la room.`, "ok", `steady:${pseudo}`);
+      } else {
+        updateRoomPresenceStatus("En attente de l'adversaire…", "waiting", "waiting");
+      }
     }
   };
   session.onError = (err) => showToast(`Erreur : ${err.message}`);
@@ -614,9 +660,10 @@ async function onCreateRoom() {
     await onlineSession.connect();
 
     elRoomId.textContent = data.roomId;
-    setRoomStatus("En attente de l'adversaire…", "waiting");
+    lastPresenceStatusKey = "";
     updateOnlineControls(true);
     resetGame(true);
+    updateRoomPresenceStatus("En attente de l'adversaire…", "waiting", "waiting");
     persistOnlineSession();
   } catch (err) {
     setRoomStatus(`Erreur : ${err.message}`, "error");
@@ -641,9 +688,14 @@ async function onJoinRoom() {
     await onlineSession.connect();
 
     elRoomId.textContent = data.roomId;
-    setRoomStatus("Connexion à la room établie.", "ok");
+    lastPresenceStatusKey = "";
     updateOnlineControls(true);
     resetGame(true);
+    if (opponentPresent) {
+      updateRoomPresenceStatus(`${sanitizePseudo(opponentPseudo, "L'adversaire")} a rejoint la room.`, "ok", `join:${sanitizePseudo(opponentPseudo, "L'adversaire")}`);
+    } else {
+      updateRoomPresenceStatus("En attente de l'adversaire…", "waiting", "waiting");
+    }
     persistOnlineSession();
   } catch (err) {
     setRoomStatus(`Erreur : ${err.message}`, "error");
@@ -658,6 +710,7 @@ function onLeaveRoom() {
   myPseudo = "";
   opponentPseudo = "";
   opponentPresent = false;
+  lastPresenceStatusKey = "";
   clearOnlineSession();
   updateOnlineControls(false);
   setRoomStatus("", "info");
@@ -672,10 +725,11 @@ async function tryReconnect(saved) {
   setRoomStatus("Reconnexion en cours…", "info");
 
   try {
-    myPseudo = saved.myPseudo || "Joueur";
-    opponentPseudo = saved.opponentPseudo || "";
-    opponentPresent = Boolean(opponentPseudo);
+    myPseudo = sanitizePseudo(saved.myPseudo, "Joueur");
+    opponentPseudo = sanitizePseudo(saved.opponentPseudo, "");
+    opponentPresent = false;
     onlineSymbol = saved.playerSymbol;
+    lastPresenceStatusKey = "";
     elPseudoInput.value = myPseudo;
 
     const fresh = await reconnectRoom(saved.roomId, saved.playerToken, saved.playerSymbol);
@@ -690,21 +744,7 @@ async function tryReconnect(saved) {
     attachSessionHandlers(onlineSession);
     await onlineSession.connect();
 
-    state = createInitialState();
-    prevState = null;
-    moveList = Array.isArray(saved.moveList) ? saved.moveList.map((move) => ({ ...move })) : [];
-    log = [];
-
-    for (const move of moveList) {
-      const playerVal = move.player === "X" ? X : O;
-      const res = applyMove(state, { sb: move.sb, c: move.c }, playerVal);
-      if (!res.ok) {
-        throw new Error("Saved move list is invalid");
-      }
-      log.push(recordMoveText(move, playerVal));
-    }
-
-    updateLogUI();
+    rebuildOnlineStateFromMoves(saved.moveList);
     elRoomId.textContent = fresh.roomId;
     updateOnlineControls(true);
     buildBoardDOM(elBoard, onClick);
@@ -712,11 +752,11 @@ async function tryReconnect(saved) {
     persistOnlineSession();
 
     if (opponentPresent) {
-      const oppLabel = opponentPseudo || "L'adversaire";
-      setRoomStatus(`Reconnecté. ${oppLabel} est déjà dans la room.`, "ok");
+      updateRoomPresenceStatus(`${sanitizePseudo(opponentPseudo, "L'adversaire")} a rejoint la room.`, "ok", `join:${sanitizePseudo(opponentPseudo, "L'adversaire")}`);
     } else {
-      setRoomStatus("Reconnecté. En attente de l'adversaire…", "waiting");
+      updateRoomPresenceStatus("En attente de l'adversaire…", "waiting", "waiting");
     }
+
     showToast("Partie restaurée ✓");
   } catch (err) {
     setRoomStatus(`Reconnexion échouée : ${err.message}`, "error");
@@ -724,8 +764,10 @@ async function tryReconnect(saved) {
     onlineSession?.disconnect();
     onlineSession = null;
     onlineSymbol = null;
+    myPseudo = "";
     opponentPseudo = "";
     opponentPresent = false;
+    lastPresenceStatusKey = "";
     updateOnlineControls(false);
   }
 }

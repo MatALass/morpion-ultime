@@ -40,7 +40,27 @@ export function saveOnlineSession(payload) {
 export function loadOnlineSession() {
   try {
     const raw = localStorage.getItem(ONLINE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    return {
+      roomId: String(parsed.roomId ?? "").trim().toUpperCase(),
+      playerToken: String(parsed.playerToken ?? "").trim(),
+      playerSymbol: String(parsed.playerSymbol ?? "").trim().toUpperCase(),
+      myPseudo: String(parsed.myPseudo ?? "").trim(),
+      opponentPseudo: String(parsed.opponentPseudo ?? "").trim(),
+      moveList: Array.isArray(parsed.moveList)
+        ? parsed.moveList
+            .filter((move) => move && typeof move.sb === "number" && typeof move.c === "number" && ["X", "O"].includes(String(move.player ?? "").toUpperCase()))
+            .map((move) => ({
+              sb: move.sb,
+              c: move.c,
+              player: String(move.player).toUpperCase(),
+              pseudo: String(move.pseudo ?? "").trim(),
+            }))
+        : [],
+    };
   } catch {
     return null;
   }

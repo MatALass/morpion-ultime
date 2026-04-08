@@ -12,8 +12,13 @@ function toRoomId(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
+function now() {
+  return Date.now();
+}
+
 function isExpired(meta) {
-  return !meta?.createdAt || Date.now() - meta.createdAt > ROOM_TTL_MS;
+  const lastActivityAt = meta?.updatedAt ?? meta?.createdAt ?? 0;
+  return !lastActivityAt || now() - lastActivityAt > ROOM_TTL_MS;
 }
 
 async function readRoomMeta(ably, roomId) {
@@ -40,9 +45,15 @@ async function buildTokenRequest(ably, roomId, playerSymbol, playerToken) {
     clientId: `${roomId}:${playerSymbol}:${playerToken}`,
     capability: {
       [`room:${roomId}`]: ["publish", "subscribe", "presence"],
-      [`room-meta:${roomId}`]: ["subscribe"],
+      [`room-meta:${roomId}`]: ["subscribe", "publish"],
     },
   });
+}
+
+function validatePlayer(meta, playerSymbol, playerToken) {
+  if (!["X", "O"].includes(playerSymbol)) return false;
+  const expectedToken = playerSymbol === "X" ? meta?.hostToken : meta?.guestToken;
+  return Boolean(expectedToken) && expectedToken === playerToken;
 }
 
 module.exports = async function handler(req, res) {
@@ -65,11 +76,12 @@ module.exports = async function handler(req, res) {
   if (action === "create") {
     const roomId = genId(6);
     const hostToken = genId(16);
+    const ts = now();
 
     const meta = {
       roomId,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: ts,
+      updatedAt: ts,
       hostToken,
       guestToken: null,
     };
@@ -96,8 +108,9 @@ module.exports = async function handler(req, res) {
     const guestToken = genId(16);
     const nextMeta = {
       ...meta,
+      roomId,
       guestToken,
-      updatedAt: Date.now(),
+      updatedAt: now(),
     };
 
     await writeRoomMeta(ably, roomId, nextMeta);
@@ -112,27 +125,33 @@ module.exports = async function handler(req, res) {
 
   if (action === "reconnect") {
     const roomId = toRoomId(requestedRoom);
-    if (!roomId || !playerToken || !playerSymbol) {
+    const normalizedSymbol = String(playerSymbol ?? "").trim().toUpperCase();
+
+    if (!roomId || !playerToken || !normalizedSymbol) {
       return res.status(400).json({ error: "roomId, playerToken and playerSymbol are required" });
     }
-    if (!["X", "O"].includes(playerSymbol)) {
+    if (!["X", "O"].includes(normalizedSymbol)) {
       return res.status(400).json({ error: "Invalid symbol" });
     }
 
     const meta = await readRoomMeta(ably, roomId);
     if (!meta) return res.status(404).json({ error: "Room not found" });
     if (isExpired(meta)) return res.status(410).json({ error: "Room expired" });
-
-    const expectedToken = playerSymbol === "X" ? meta.hostToken : meta.guestToken;
-    if (!expectedToken || expectedToken !== playerToken) {
+    if (!validatePlayer(meta, normalizedSymbol, playerToken)) {
       return res.status(403).json({ error: "Invalid token" });
     }
+
+    await writeRoomMeta(ably, roomId, {
+      ...meta,
+      roomId,
+      updatedAt: now(),
+    });
 
     return res.status(200).json({
       roomId,
       playerToken,
-      playerSymbol,
-      ablyTokenRequest: await buildTokenRequest(ably, roomId, playerSymbol, playerToken),
+      playerSymbol: normalizedSymbol,
+      ablyTokenRequest: await buildTokenRequest(ably, roomId, normalizedSymbol, playerToken),
     });
   }
 
