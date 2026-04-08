@@ -2,7 +2,7 @@
 import { createInitialState, cloneState, applyMove, X, O, DRAW, EMPTY, legalMoves } from "./game.js";
 import { chooseAiMoveWithStats, getTopMoves } from "./ai.js";
 import { buildBoardDOM, render } from "./ui.js";
-import { saveToLocal, loadFromLocal, clearLocal, encodeShare, decodeShare } from "./storage.js";
+import { saveToLocal, loadFromLocal, clearLocal, encodeShare, decodeShare, saveOnlineSession, loadOnlineSession, clearOnlineSession } from "./storage.js";
 import { buildReplay } from "./replay.js";
 import { OnlineSession, createRoom, joinRoom } from "./online.js";
 
@@ -69,6 +69,11 @@ const elRoomId         = $("roomIdDisplay");
 const elRoomIdRow      = $("onlineRoomIdRow");
 const elCopyRoom       = $("copyRoomBtn");
 const elLeaveRoom      = $("leaveRoomBtn");
+const elPseudoInput    = $("pseudoInput");
+const elReconnectBanner  = $("reconnectBanner");
+const elReconnectBtn     = $("reconnectBtn");
+const elReconnectDismiss = $("reconnectDismiss");
+const elReconnectText    = $("reconnectText");
 
 // App state
 let state = createInitialState();
@@ -93,7 +98,9 @@ let series = { X: 0, O: 0, D: 0 };
 // Online session
 /** @type {OnlineSession|null} */
 let onlineSession = null;
-let onlineSymbol = null; // "X" | "O" — our symbol in the current online game
+let onlineSymbol = null;     // "X" | "O" — our symbol in the current online game
+let myPseudo = "";           // our pseudo for the current online game
+let opponentPseudo = "";     // opponent pseudo, received via Ably presence
 
 function isOnlineMode() {
   return elMode.value === "online";
@@ -236,8 +243,11 @@ function currentPlayersInfo() {
 
   if (mode === "online") {
     const sym = onlineSymbol ?? "?";
-    elPlayerHint.textContent = `Tu joues : ${sym}`;
-    elAiHint.textContent = `Adversaire : ${otherSym(sym)}`;
+    const me = myPseudo ? `${myPseudo} (${sym})` : sym;
+    const oppSym = otherSym(sym);
+    const opp = opponentPseudo ? `${opponentPseudo} (${oppSym})` : oppSym;
+    elPlayerHint.textContent = `Tu joues : ${me}`;
+    elAiHint.textContent = `Adversaire : ${opp}`;
     return;
   }
 
@@ -278,11 +288,16 @@ function setStatus() {
 }
 
 function recordMoveText(move, playerVal) {
-  const p = vToChar(playerVal);
+  const sym = vToChar(playerVal);
+  // Show pseudo if in online mode, otherwise just the symbol
+  let label = sym;
+  if (isOnlineMode()) {
+    if (sym === onlineSymbol && myPseudo) label = `${myPseudo} (${sym})`;
+    else if (sym !== onlineSymbol && opponentPseudo) label = `${opponentPseudo} (${sym})`;
+  }
   const sb = move.sb + 1;
   const c = move.c + 1;
-  const target = move.c + 1;
-  return `<b>${p}</b> → plateau ${sb}, case ${c} (envoie → plateau ${target})`;
+  return `<b>${label}</b> → plateau ${sb}, case ${c} (envoie → plateau ${c})`;
 }
 
 function endIfNeeded() {
@@ -402,6 +417,21 @@ function onClick(sb, c) {
   maybeAutoPlay();
 }
 
+// ─── Online session persistence ──────────────────────────────────────────
+
+function persistOnlineSession() {
+  if (!onlineSession || !onlineSymbol) return;
+  saveOnlineSession({
+    roomId: onlineSession.roomId,
+    playerToken: onlineSession.playerToken,
+    playerSymbol: onlineSymbol,
+    ablyTokenRequest: onlineSession.ablyTokenRequest,
+    myPseudo,
+    opponentPseudo,
+    moveList: moveList.map(m => ({ ...m })),
+  });
+}
+
 // ─── Online move handling ─────────────────────────────────────────────────
 
 async function handleOnlineMove(move, symbol) {
@@ -428,6 +458,7 @@ async function handleOnlineMove(move, symbol) {
   updateLogUI();
   rerender();
   endIfNeeded();
+  persistOnlineSession();
 
   // Send to server (fire-and-forget; errors shown via toast)
   try {
@@ -457,9 +488,14 @@ function applyOpponentMove(move, symbol) {
   updateLogUI();
   rerender();
   endIfNeeded();
+  persistOnlineSession();
 }
 
 // ─── Online UI ────────────────────────────────────────────────────────────
+
+function getPseudo() {
+  return elPseudoInput.value.trim() || "Joueur";
+}
 
 function setRoomStatus(msg, type = "info") {
   elRoomStatus.textContent = msg;
@@ -474,35 +510,44 @@ function updateOnlineControls(connected) {
   elCreateRoom.disabled = connected;
   elJoinRoom.disabled = connected;
   elRoomCodeInput.disabled = connected;
+  elPseudoInput.disabled = connected;
   elLeaveRoom.classList.toggle("hidden", !connected);
   elRoomIdRow.classList.toggle("hidden", !connected);
+}
+
+function attachSessionHandlers(session) {
+  session.onMove = ({ symbol, move }) => applyOpponentMove(move, symbol);
+  session.onPresence = ({ opponentPresent, opponentPseudo: oppPseudo }) => {
+    if (oppPseudo) {
+      opponentPseudo = oppPseudo;
+      setStatus(); // refresh player hints with real pseudo
+    }
+    if (opponentPresent) {
+      const label = opponentPseudo || "L'adversaire";
+      setRoomStatus(`${label} est connecté ! À vous de jouer.`, "ok");
+    } else {
+      setRoomStatus("En attente de l'adversaire…", "waiting");
+    }
+  };
+  session.onError = (err) => showToast(`Erreur : ${err.message}`);
 }
 
 async function onCreateRoom() {
   elCreateRoom.disabled = true;
   setRoomStatus("Création de la room…", "info");
+  myPseudo = getPseudo();
 
   try {
     const data = await createRoom();
     onlineSymbol = data.playerSymbol; // "X"
 
-    onlineSession = new OnlineSession(data);
-    onlineSession.onMove = ({ symbol, move }) => applyOpponentMove(move, symbol);
-    onlineSession.onPresence = ({ opponentPresent }) => {
-      if (opponentPresent) {
-        setRoomStatus("Adversaire connecté ! À vous de jouer.", "ok");
-      } else {
-        setRoomStatus("En attente de l'adversaire…", "waiting");
-      }
-    };
-    onlineSession.onError = (err) => showToast(`Erreur : ${err.message}`);
-
+    onlineSession = new OnlineSession({ ...data, myPseudo });
+    attachSessionHandlers(onlineSession);
     await onlineSession.connect();
 
     elRoomId.textContent = data.roomId;
     setRoomStatus("En attente de l'adversaire…", "waiting");
     updateOnlineControls(true);
-
     resetGame(true);
   } catch (err) {
     setRoomStatus(`Erreur : ${err.message}`, "error");
@@ -516,28 +561,19 @@ async function onJoinRoom() {
 
   elJoinRoom.disabled = true;
   setRoomStatus("Connexion…", "info");
+  myPseudo = getPseudo();
 
   try {
     const data = await joinRoom(roomId);
     onlineSymbol = data.playerSymbol; // "O"
 
-    onlineSession = new OnlineSession(data);
-    onlineSession.onMove = ({ symbol, move }) => applyOpponentMove(move, symbol);
-    onlineSession.onPresence = ({ opponentPresent }) => {
-      if (opponentPresent) {
-        setRoomStatus("Connecté ! À vous de jouer.", "ok");
-      } else {
-        setRoomStatus("Connexion perdue.", "error");
-      }
-    };
-    onlineSession.onError = (err) => showToast(`Erreur : ${err.message}`);
-
+    onlineSession = new OnlineSession({ ...data, myPseudo });
+    attachSessionHandlers(onlineSession);
     await onlineSession.connect();
 
     elRoomId.textContent = data.roomId;
     setRoomStatus("Connecté ! X commence.", "ok");
     updateOnlineControls(true);
-
     resetGame(true);
   } catch (err) {
     setRoomStatus(`Erreur : ${err.message}`, "error");
@@ -549,10 +585,68 @@ function onLeaveRoom() {
   onlineSession?.disconnect();
   onlineSession = null;
   onlineSymbol = null;
+  myPseudo = "";
+  opponentPseudo = "";
+  clearOnlineSession();
   updateOnlineControls(false);
   setRoomStatus("", "info");
   elRoomId.textContent = "";
   showToast("Room quittée.");
+}
+
+// ─── Reconnection after reload ────────────────────────────────────────────
+
+async function tryReconnect(saved) {
+  elReconnectBanner.classList.add("hidden");
+  setRoomStatus("Reconnexion en cours…", "info");
+
+  try {
+    // Restore pseudos
+    myPseudo = saved.myPseudo || "Joueur";
+    opponentPseudo = saved.opponentPseudo || "";
+    onlineSymbol = saved.playerSymbol;
+
+    // Pre-fill pseudo input
+    elPseudoInput.value = myPseudo;
+
+    onlineSession = new OnlineSession({
+      roomId: saved.roomId,
+      playerToken: saved.playerToken,
+      playerSymbol: saved.playerSymbol,
+      ablyTokenRequest: saved.ablyTokenRequest,
+      myPseudo,
+    });
+    attachSessionHandlers(onlineSession);
+    await onlineSession.connect();
+
+    // Rebuild game state from saved move list
+    moveList = saved.moveList ?? [];
+    if (moveList.length) {
+      const replayStatesLocal = buildReplay(moveList);
+      state = cloneState(replayStatesLocal[replayStatesLocal.length - 1]);
+      // Rebuild log entries
+      log = moveList.map(m => {
+        const pVal = m.player === "X" ? X : O;
+        return recordMoveText({ sb: m.sb, c: m.c }, pVal);
+      });
+      updateLogUI();
+    }
+
+    elRoomId.textContent = saved.roomId;
+    updateOnlineControls(true);
+    buildBoardDOM(elBoard, onClick);
+    rerender();
+
+    const oppLabel = opponentPseudo || "L'adversaire";
+    setRoomStatus(`Reconnecté ! En attente de ${oppLabel}…`, "waiting");
+    showToast("Partie restaurée ✓");
+  } catch (err) {
+    setRoomStatus(`Reconnexion échouée : ${err.message}`, "error");
+    clearOnlineSession();
+    onlineSession = null;
+    onlineSymbol = null;
+    updateOnlineControls(false);
+  }
 }
 
 // ─── AI ───────────────────────────────────────────────────────────────────
@@ -834,6 +928,14 @@ elCopyRoom.addEventListener("click", () => {
   if (!code) return;
   navigator.clipboard.writeText(code).then(() => showToast("Code copié !")).catch(() => showToast(code));
 });
+elReconnectBtn.addEventListener("click", () => {
+  const saved = loadOnlineSession();
+  if (saved) tryReconnect(saved);
+});
+elReconnectDismiss.addEventListener("click", () => {
+  clearOnlineSession();
+  elReconnectBanner.classList.add("hidden");
+});
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 
@@ -841,7 +943,16 @@ buildBoardDOM(elBoard, onClick);
 updateSeriesUI();
 showOnlinePanel(false);
 
-if (!loadPersisted()) {
+// Check for an interrupted online session to offer reconnect
+const savedOnlineSession = loadOnlineSession();
+if (savedOnlineSession) {
+  // Switch to online mode and show the reconnect banner
+  elMode.value = "online";
+  showOnlinePanel(true);
+  elPseudoInput.value = savedOnlineSession.myPseudo || "";
+  elReconnectText.textContent = `Partie en cours détectée (room ${savedOnlineSession.roomId}) — reprendre ?`;
+  elReconnectBanner.classList.remove("hidden");
+} else if (!loadPersisted()) {
   resetGame(true);
 } else {
   showToast("Sauvegarde restaurée.");

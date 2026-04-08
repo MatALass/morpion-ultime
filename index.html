@@ -119,11 +119,22 @@
 
         <div id="onlinePanel" class="online-panel hidden">
           <div class="online-panel__header">
-            <span class="online-panel__title">🌐 Duel en ligne</span>
+            <span class="online-panel__title">Duel en ligne</span>
             <button id="leaveRoomBtn" class="hidden btn-danger">Quitter la room</button>
           </div>
 
+          <div id="reconnectBanner" class="reconnect-banner hidden">
+            <span id="reconnectText">Partie en cours détectée…</span>
+            <button id="reconnectBtn" class="btn-primary">Reprendre</button>
+            <button id="reconnectDismiss" class="btn-ghost">Ignorer</button>
+          </div>
+
           <div class="online-panel__body">
+            <div class="online-pseudo-row">
+              <label for="pseudoInput">Pseudo :</label>
+              <input id="pseudoInput" type="text" placeholder="Ton pseudo" maxlength="16" spellcheck="false" autocomplete="off" />
+            </div>
+
             <div class="online-create-join">
               <button id="createRoomBtn" class="btn-primary">Créer une room</button>
               <span class="online-sep">ou</span>
@@ -134,14 +145,14 @@
             <div id="onlineRoomIdRow" class="online-room-id hidden">
               <span>Code à partager :</span>
               <strong id="roomIdDisplay" class="room-code">—</strong>
-              <button id="copyRoomBtn" title="Copier le code">📋</button>
+              <button id="copyRoomBtn" title="Copier le code">Copier le code</button>
             </div>
 
             <div id="roomStatus" class="room-status"></div>
           </div>
 
           <p class="hint">
-            Crée une room et envoie le code à ton adversaire. Undo/Redo sont désactivés en mode en ligne.
+            Crée une room et envoie le code à ton adversaire. Undo/Redo désactivés en mode en ligne.
           </p>
         </div>
       </section>
